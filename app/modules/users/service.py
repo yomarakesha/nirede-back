@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -56,10 +56,19 @@ async def verify_otp(session: AsyncSession, phone: str, code: str) -> User:
     )
     if otp is None:
         raise _unauthorized("otp_invalid")
-    if otp.expires_at <= utcnow() or otp.attempts >= get_settings().otp_max_attempts:
+    if otp.expires_at <= utcnow():
+        raise _unauthorized("otp_expired")
+    # Reserve an attempt atomically before comparing; a NULL result means the limit is used up.
+    attempts = await session.scalar(
+        update(OtpCode)
+        .where(OtpCode.id == otp.id, OtpCode.attempts < get_settings().otp_max_attempts)
+        .values(attempts=OtpCode.attempts + 1)
+        .returning(OtpCode.attempts)
+    )
+    if attempts is None:
+        await session.commit()
         raise _unauthorized("otp_expired")
     if otp.code_hash != hash_otp(phone, code):
-        otp.attempts += 1
         await session.commit()
         raise _unauthorized("otp_invalid")
 
@@ -85,27 +94,33 @@ async def issue_tokens(session: AsyncSession, user: User) -> TokenPair:
     return TokenPair(access_token=create_access_token(user.id, user.role), refresh_token=raw)
 
 
-async def _live_refresh(session: AsyncSession, raw: str) -> RefreshToken:
-    token = await session.scalar(
-        select(RefreshToken).where(RefreshToken.token_hash == hash_token(raw))
+async def _revoke_live_refresh(session: AsyncSession, raw: str) -> int:
+    """Atomically revoke a live refresh token and return its user id; 401 if not live."""
+    now = utcnow()
+    user_id = await session.scalar(
+        update(RefreshToken)
+        .where(
+            RefreshToken.token_hash == hash_token(raw),
+            RefreshToken.revoked_at.is_(None),
+            RefreshToken.expires_at > now,
+        )
+        .values(revoked_at=now)
+        .returning(RefreshToken.user_id)
     )
-    if token is None or token.revoked_at is not None or token.expires_at <= utcnow():
+    if user_id is None:
         raise _unauthorized("invalid_refresh_token")
-    return token
+    return user_id
 
 
 async def rotate_refresh(session: AsyncSession, raw: str) -> TokenPair:
-    token = await _live_refresh(session, raw)
-    token.revoked_at = utcnow()
-    user = await session.get(User, token.user_id)
+    user = await session.get(User, await _revoke_live_refresh(session, raw))
     if user is None:
         raise _unauthorized("invalid_refresh_token")
     return await issue_tokens(session, user)
 
 
 async def revoke_refresh(session: AsyncSession, raw: str) -> None:
-    token = await _live_refresh(session, raw)
-    token.revoked_at = utcnow()
+    await _revoke_live_refresh(session, raw)
     await session.commit()
 
 

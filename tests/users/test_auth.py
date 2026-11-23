@@ -96,3 +96,13 @@ async def test_logout_revokes(client, sms):
     assert r.status_code == 204
     r = await client.post("/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
     assert r.status_code == 401
+
+
+async def test_attempts_counted_in_db(client, session, sms):
+    await client.post("/api/v1/auth/otp/request", json={"phone": "+99365123456"})
+    await client.post("/api/v1/auth/otp/verify", json={"phone": "+99365123456", "code": "0000"})
+    await client.post("/api/v1/auth/otp/verify", json={"phone": "+99365123456", "code": "0000"})
+    from sqlalchemy import select
+
+    attempts = await session.scalar(select(OtpCode.attempts))
+    assert attempts == 2
