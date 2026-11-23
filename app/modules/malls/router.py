@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+
 from app.deps import SessionDep
 from app.modules.malls import service
 from app.modules.malls.models import Mall

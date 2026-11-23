@@ -40,3 +40,27 @@ async def make_mall(session, city, name: str = "Беркарар", layout: str =
     session.add(mall)
     await session.flush()
     return mall
+
+
+async def make_category(session, name: str, parent=None, **kw):
+    from app.modules.categories.models import Category
+
+    slug = kw.pop("slug", None) or f"{name}-{id(object())}"
+    cat = Category(
+        name_ru=name,
+        name_tk=kw.pop("name_tk", name),
+        slug=slug,
+        parent_id=parent.id if parent else None,
+        **kw,
+    )
+    session.add(cat)
+    await session.flush()
+    return cat
+
+
+async def make_women_tree(session):
+    """Женщинам › Верхняя одежда › Пальто"""
+    root = await make_category(session, "Женщинам", name_tk="Aýallara")
+    outer = await make_category(session, "Верхняя одежда", root, name_tk="Daşky eşik")
+    coat = await make_category(session, "Пальто", outer, name_tk="Palto")
+    return root, outer, coat
