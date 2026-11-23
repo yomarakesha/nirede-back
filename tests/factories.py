@@ -116,3 +116,25 @@ async def make_shop(
         )
     await session.flush()
     return shop
+
+
+async def make_promotion(session, shop, title: str = "−30% на пальто", *, status="approved", **kw):
+    from datetime import timedelta
+
+    from app.modules.promotions.models import Promotion
+    from app.timeutil import utcnow
+
+    now = utcnow()
+    promo = Promotion(
+        shop_id=shop.id,
+        title_ru=title,
+        title_tk=kw.pop("title_tk", title),
+        badge=kw.pop("badge", "−30%"),
+        starts_at=kw.pop("starts_at", now - timedelta(days=1)),
+        ends_at=kw.pop("ends_at", now + timedelta(days=10)),
+        status=status,
+        **kw,
+    )
+    session.add(promo)
+    await session.flush()
+    return promo
