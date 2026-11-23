@@ -9,7 +9,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://nirede:nirede@localhost:5433/nirede"
     test_database_url: str = "postgresql+asyncpg://nirede:nirede@localhost:5433/nirede_test"
-    jwt_secret: str = "change-me"
+    jwt_secret: str = "change-me-to-a-long-random-secret-of-32-plus-bytes"
     access_ttl_minutes: int = 30
     refresh_ttl_days: int = 30
     otp_ttl_minutes: int = 5

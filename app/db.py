@@ -2,6 +2,7 @@ from collections.abc import AsyncIterator
 from datetime import datetime
 
 from sqlalchemy import BigInteger, DateTime, Identity, func
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -27,3 +28,14 @@ SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 async def get_session() -> AsyncIterator[AsyncSession]:
     async with SessionLocal() as session:
         yield session
+
+
+def str_enum(enum_cls: type) -> SAEnum:
+    """Store a StrEnum as its value in a VARCHAR column (no native PG enum)."""
+    return SAEnum(
+        enum_cls,
+        native_enum=False,
+        length=16,
+        values_callable=lambda e: [m.value for m in e],
+        validate_strings=True,
+    )
