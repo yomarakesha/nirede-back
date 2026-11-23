@@ -39,7 +39,7 @@ async def list_change_requests(
 
 @router.post("/{cr_id}/approve")
 async def approve(cr_id: int, admin: AdminUser, session: SessionDep) -> ChangeRequestOut:
-    cr = await service.get_change_request_or_404(session, cr_id)
+    cr = await service.get_change_request_or_404(session, cr_id, lock=True)
     return ChangeRequestOut.model_validate(await service.approve_change_request(session, cr, admin))
 
 
@@ -47,7 +47,7 @@ async def approve(cr_id: int, admin: AdminUser, session: SessionDep) -> ChangeRe
 async def reject(
     cr_id: int, body: ReviewIn, admin: AdminUser, session: SessionDep
 ) -> ChangeRequestOut:
-    cr = await service.get_change_request_or_404(session, cr_id)
+    cr = await service.get_change_request_or_404(session, cr_id, lock=True)
     return ChangeRequestOut.model_validate(
         await service.reject_change_request(session, cr, admin, body.comment)
     )

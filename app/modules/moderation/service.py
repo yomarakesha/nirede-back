@@ -60,27 +60,44 @@ async def submit_change_request(
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"{entity_type}_not_found")
     await check_seller_can_edit(session, author, shop_id)
 
-    existing = await session.scalar(
-        select(ChangeRequest).where(
+    # A payload the admin may already be reading never changes: supersede it with a new request.
+    previous = await session.scalar(
+        select(ChangeRequest)
+        .where(
             ChangeRequest.entity_type == entity_type,
             ChangeRequest.entity_id == entity_id,
             ChangeRequest.author_id == author.id,
             ChangeRequest.status == ModerationStatus.pending,
         )
+        .with_for_update()
     )
-    if existing is None:
-        existing = ChangeRequest(
-            entity_type=entity_type, entity_id=entity_id, author_id=author.id, payload=payload
-        )
-        session.add(existing)
-    else:
-        existing.payload = payload
+    if previous is not None:
+        previous.status = ModerationStatus.rejected
+        previous.admin_comment = "superseded"
+        previous.reviewed_at = utcnow()
+        await session.flush()
+    cr = ChangeRequest(
+        entity_type=entity_type, entity_id=entity_id, author_id=author.id, payload=payload
+    )
+    session.add(cr)
     await session.commit()
-    return existing
+    return cr
 
 
-async def get_change_request_or_404(session: AsyncSession, cr_id: int) -> ChangeRequest:
-    return await get_or_404(session, ChangeRequest, cr_id, "change_request_not_found")
+async def get_change_request_or_404(
+    session: AsyncSession, cr_id: int, *, lock: bool = False
+) -> ChangeRequest:
+    if not lock:
+        return await get_or_404(session, ChangeRequest, cr_id, "change_request_not_found")
+    cr = await session.scalar(
+        select(ChangeRequest)
+        .where(ChangeRequest.id == cr_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if cr is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "change_request_not_found")
+    return cr
 
 
 def _close(cr: ChangeRequest, admin: User, new_status: ModerationStatus, comment: str | None):

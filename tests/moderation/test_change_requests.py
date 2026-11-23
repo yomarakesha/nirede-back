@@ -104,16 +104,30 @@ async def test_seller_cannot_change_location(client, seller_world):
     assert r.status_code == 422
 
 
-async def test_resubmit_replaces_pending(client, seller_world):
+async def test_resubmit_supersedes_pending(client, seller_world):
     w = seller_world
     first = (await _submit(client, w, {"how_to_find_ru": "A"})).json()
     second = (await _submit(client, w, {"how_to_find_ru": "B"})).json()
-    assert second["id"] == first["id"]
+    # A reviewed payload never changes under the admin: resubmitting creates a new request.
+    assert second["id"] != first["id"]
     assert second["payload"] == {"how_to_find_ru": "B"}
-    queue = (await client.get("/api/v1/admin/change-requests", headers=w.ah)).json()
-    assert queue["total"] == 1
+    queue = (
+        await client.get(
+            "/api/v1/admin/change-requests", params={"status": "pending"}, headers=w.ah
+        )
+    ).json()
+    assert [cr["id"] for cr in queue["items"]] == [second["id"]]
+    r = await client.post(f"/api/v1/admin/change-requests/{first['id']}/approve", headers=w.ah)
+    assert r.status_code == 409
+    mine = {
+        cr["id"]: cr
+        for cr in (await client.get("/api/v1/seller/change-requests", headers=w.sh)).json()
+    }
+    assert mine[first["id"]]["status"] == "rejected"
+    assert mine[first["id"]]["admin_comment"] == "superseded"
     shops = (await client.get("/api/v1/seller/shops", headers=w.sh)).json()
     assert shops[0]["pending_change_requests"] == 1
+    assert await _how_to_find(client, w.shop.id) == "Старый текст"
 
 
 async def test_approve_after_subscription_expired_autorejects(client, seller_world, session):

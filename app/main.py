@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -26,6 +28,7 @@ API_PREFIX = "/api/v1"
 
 
 def create_app() -> FastAPI:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     app = FastAPI(title="Nirede API", version="0.1.0")
 
     @app.get("/health")
