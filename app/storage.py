@@ -1,6 +1,7 @@
 import asyncio
 import io
 import uuid
+import warnings
 from pathlib import Path
 from typing import Protocol
 
@@ -13,6 +14,7 @@ from app.timeutil import utcnow
 ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_BYTES = 5 * 1024 * 1024
 MAX_SIDE = 1600
+MAX_PIXELS = 40_000_000  # checked from the header, before decoding
 
 
 class Storage(Protocol):
@@ -54,7 +56,19 @@ def media_url(path: str | None) -> str | None:
 
 def _to_webp(data: bytes) -> bytes:
     try:
-        with Image.open(io.BytesIO(data)) as img:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            img = Image.open(io.BytesIO(data))
+    except (Image.DecompressionBombWarning, Image.DecompressionBombError) as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "image_too_large") from exc
+    except (UnidentifiedImageError, OSError) as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_image") from exc
+    try:
+        with img:
+            width, height = img.size
+            if width * height > MAX_PIXELS:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "image_too_large")
+            img.draft("RGB", (MAX_SIDE, MAX_SIDE))  # JPEG: decode at reduced size
             img.load()
             img = img.convert("RGBA" if img.mode in ("RGBA", "LA", "P") else "RGB")
             img.thumbnail((MAX_SIDE, MAX_SIDE))

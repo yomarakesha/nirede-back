@@ -70,3 +70,15 @@ async def test_seller_can_upload(client, session, storage):
     files = {"file": ("a.png", _png(10, 10), "image/png")}
     r = await client.post("/api/v1/seller/uploads", files=files, headers=h)
     assert r.status_code == 201
+
+
+async def test_reject_huge_pixel_count(client, session, storage):
+    # 12000x12000 single-colour PNG compresses to a few hundred KB but decodes to ~430 MB.
+    h = auth_headers(await make_admin(session))
+    buf = io.BytesIO()
+    Image.new("1", (12000, 12000)).save(buf, "PNG")
+    assert len(buf.getvalue()) < 5 * 1024 * 1024
+    files = {"file": ("bomb.png", buf.getvalue(), "image/png")}
+    r = await client.post("/api/v1/admin/uploads", files=files, headers=h)
+    assert r.status_code == 422
+    assert r.json()["detail"] == "image_too_large"
