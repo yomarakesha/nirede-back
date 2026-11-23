@@ -388,11 +388,13 @@ DESCRIPTION = """REST API Nirede: где в Ашхабаде продаётся 
 **Соглашения**
 - Все тексты парой полей `*_ru` / `*_tk`; клиент выбирает язык сам.
 - Списки: `?limit=&offset=` → `{"items": [...], "total": N}`.
-- Ошибки: `{"detail": "код_ошибки"}` (например `otp_invalid`, `subscription_required`, `already_reviewed`).
-- Картинки: сначала `POST /admin/uploads` или `/seller/uploads` (multipart `file`), затем путь `path`
-  передаётся в поля `photos`, `logo`, `image`, `icon`. Полный адрес — поле `*_url` в ответах.
+- Ошибки: `{"detail": "код_ошибки"}`, например `otp_invalid`, `subscription_required`,
+  `already_reviewed`.
+- Картинки: сначала `POST /admin/uploads` или `/seller/uploads` (multipart `file`),
+  затем путь `path` передаётся в поля `photos`, `logo`, `image`, `icon`.
+  Полный адрес — поле `*_url` в ответах.
 - Время работы в часовом поясе Asia/Ashgabat; даты акций — ISO 8601 с часовым поясом.
-- Созданные объекты (POST в Admin/Seller) сохраняют свой id в переменные (`mall_id`, `shop_id`, ...).
+- Созданные объекты (POST в Admin/Seller) сохраняют id в переменные (`mall_id`, `shop_id`, ...).
 """
 
 
