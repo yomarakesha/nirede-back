@@ -3,6 +3,7 @@ from datetime import time
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.common import PhotoOut
+from app.modules.categories.schemas import CategoryBrief
 from app.modules.malls.models import MallLayout
 from app.storage import media_url
 
@@ -101,3 +102,4 @@ class MallDetail(MallListItem):
     floors: list[MallFloorOut]
     is_open_now: bool
     shop_count: int = 0
+    root_categories: list[CategoryBrief] = []

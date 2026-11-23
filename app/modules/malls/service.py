@@ -1,9 +1,11 @@
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.common import PhotoOut
+from app.modules.categories.schemas import CategoryBrief
+from app.modules.categories.service import ancestors_map
 from app.modules.cities.models import City
 from app.modules.malls.models import Mall, MallFloor, MallLayout, MallPhoto
 from app.modules.malls.schemas import MallDetail, MallFloorIn, MallFloorOut, MallListItem
@@ -70,8 +72,30 @@ async def to_list_items(session: AsyncSession, malls: list[Mall]) -> list[MallLi
     ]
 
 
+async def _shop_stats(session: AsyncSession, mall_id: int) -> tuple[int, list[CategoryBrief]]:
+    # Imported here: shops depends on malls, not the other way round.
+    from app.modules.shops.models import Shop, shop_categories
+
+    active = select(Shop.id).where(Shop.mall_id == mall_id, Shop.is_active)
+    count = await session.scalar(select(func.count()).select_from(active.subquery())) or 0
+    category_ids = list(
+        await session.scalars(
+            select(shop_categories.c.category_id)
+            .where(shop_categories.c.shop_id.in_(active))
+            .distinct()
+        )
+    )
+    roots = {}
+    for path in (await ancestors_map(session, category_ids)).values():
+        if path and all(c.is_active for c in path):
+            roots[path[0].id] = path[0]
+    ordered = sorted(roots.values(), key=lambda c: (c.sort_order, c.id))
+    return count, [CategoryBrief.model_validate(c) for c in ordered]
+
+
 async def to_detail(session: AsyncSession, mall_id: int) -> MallDetail:
     mall = await get_mall_or_404(session, mall_id, public=True, with_children=True)
+    shop_count, root_categories = await _shop_stats(session, mall_id)
     return MallDetail(
         **MallListItem.model_validate(mall).model_dump(exclude={"cover", "cover_url"}),
         cover=mall.photos[0].path if mall.photos else None,
@@ -80,4 +104,6 @@ async def to_detail(session: AsyncSession, mall_id: int) -> MallDetail:
         photos=[PhotoOut(path=p.path) for p in mall.photos],
         floors=[MallFloorOut.model_validate(f) for f in mall.floors],
         is_open_now=is_open(mall.opens_at, mall.closes_at, utcnow()),
+        shop_count=shop_count,
+        root_categories=root_categories,
     )

@@ -64,3 +64,55 @@ async def make_women_tree(session):
     outer = await make_category(session, "Верхняя одежда", root, name_tk="Daşky eşik")
     coat = await make_category(session, "Пальто", outer, name_tk="Palto")
     return root, outer, coat
+
+
+async def make_shop(
+    session,
+    name: str,
+    *,
+    mall=None,
+    city=None,
+    floor=None,
+    row=None,
+    number=None,
+    categories=(),
+    premium: bool = False,
+    **kw,
+):
+    from datetime import timedelta
+    from decimal import Decimal
+
+    from app.modules.shops.models import Shop, Subscription, shop_categories
+    from app.timeutil import utcnow
+
+    if mall is not None:
+        kw.setdefault("city_id", mall.city_id)
+        number = number or "1"
+    else:
+        kw.setdefault("city_id", city.id)
+        kw.setdefault("address_ru", "ул. Гёроглы, 1")
+        kw.setdefault("address_tk", "Görogly köç., 1")
+    shop = Shop(
+        name=name,
+        mall_id=mall.id if mall else None,
+        floor=floor,
+        row=row,
+        number=number,
+        **kw,
+    )
+    session.add(shop)
+    await session.flush()
+    for cat in categories:
+        await session.execute(shop_categories.insert().values(shop_id=shop.id, category_id=cat.id))
+    if premium:
+        now = utcnow()
+        session.add(
+            Subscription(
+                shop_id=shop.id,
+                starts_at=now - timedelta(days=1),
+                ends_at=now + timedelta(days=29),
+                amount=Decimal("30"),
+            )
+        )
+    await session.flush()
+    return shop
