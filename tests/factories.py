@@ -11,3 +11,7 @@ async def make_user(session, phone: str = "+99365123456", role: str = "user", **
 
 def auth_headers(user: User) -> dict[str, str]:
     return {"Authorization": f"Bearer {create_access_token(user.id, user.role)}"}
+
+
+async def make_admin(session, phone: str = "+99361000000") -> User:
+    return await make_user(session, phone=phone, role="admin")
