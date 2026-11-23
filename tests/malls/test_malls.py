@@ -121,3 +121,12 @@ async def test_delete_city_with_mall_conflict(client, session):
     r = await client.delete(f"/api/v1/admin/cities/{city.id}", headers=h)
     assert r.status_code == 409
     assert r.json()["detail"] == "city_in_use"
+
+
+async def test_mall_in_inactive_city_hidden(client, session):
+    city = await make_city(session)
+    mall = await make_mall(session, city)
+    city.is_active = False
+    await session.flush()
+    assert (await client.get("/api/v1/malls")).json() == []
+    assert (await client.get(f"/api/v1/malls/{mall.id}")).status_code == 404

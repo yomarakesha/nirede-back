@@ -4,17 +4,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.common import PhotoOut
+from app.modules.cities.models import City
 from app.modules.malls.models import Mall, MallFloor, MallLayout, MallPhoto
 from app.modules.malls.schemas import MallDetail, MallFloorIn, MallFloorOut, MallListItem
 from app.timeutil import is_open, utcnow
 
 
+def public_malls():
+    """Active malls in active cities."""
+    return select(Mall).join(City, City.id == Mall.city_id).where(Mall.is_active, City.is_active)
+
+
 async def get_mall_or_404(
     session: AsyncSession, mall_id: int, *, public: bool = False, with_children: bool = False
 ) -> Mall:
-    stmt = select(Mall).where(Mall.id == mall_id)
-    if public:
-        stmt = stmt.where(Mall.is_active)
+    stmt = (public_malls() if public else select(Mall)).where(Mall.id == mall_id)
     if with_children:
         stmt = stmt.options(selectinload(Mall.photos), selectinload(Mall.floors))
         stmt = stmt.execution_options(populate_existing=True)
