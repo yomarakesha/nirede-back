@@ -4,7 +4,6 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.crud import get_or_404
 from app.enums import ModerationStatus, UserRole
 from app.modules.sellers.models import SellerApplication
 from app.modules.sellers.schemas import ApplicationIn, SellerShopOut, SubscriptionIn
@@ -35,7 +34,16 @@ async def submit_application(
 
 
 async def get_application_or_404(session: AsyncSession, app_id: int) -> SellerApplication:
-    return await get_or_404(session, SellerApplication, app_id, "application_not_found")
+    """Loaded with a row lock: reviews of the same application run one at a time."""
+    application = await session.scalar(
+        select(SellerApplication)
+        .where(SellerApplication.id == app_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if application is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "application_not_found")
+    return application
 
 
 def _ensure_pending(application: SellerApplication) -> None:

@@ -61,6 +61,8 @@ uv run ruff check . && uv run ruff format --check .
    Живой магазин не меняется, пока правку не одобрили. Если к моменту одобрения подписка
    кончилась или объект удалён, правка отклоняется автоматически с причиной в `admin_comment`.
 6. Одобренная активная акция рассылается тем, у кого магазин в избранном или его ТЦ в «моих ТЦ».
+   Акции с датой начала в будущем рассылает команда `python -m app.cli announce-due` —
+   запускайте её по cron (например, раз в 10 минут). Каждая акция рассылается один раз.
 
 ### Поиск
 
@@ -76,5 +78,6 @@ uv run ruff check . && uv run ruff format --check .
 
 - `ENV=prod` требует `JWT_SECRET` длиной от 32 байт (иначе приложение не стартует).
 - `SMS_DEBUG_LOG` в проде не включать.
+- Настройте cron: `python -m app.cli announce-due`.
 - Перед запуском подключите реальные `SmsSender` (`app/modules/users/sms.py`) и
   `PushSender` (`app/modules/notifications/push.py`).

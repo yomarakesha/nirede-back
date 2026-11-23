@@ -1,5 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
+from app.common import PatchModel
 from app.storage import media_url
 
 
@@ -42,7 +43,9 @@ class CategoryCreate(BaseModel):
     is_active: bool = True
 
 
-class CategoryUpdate(BaseModel):
+class CategoryUpdate(PatchModel):
+    non_nullable = frozenset({"name_ru", "name_tk", "slug", "sort_order", "is_active"})
+
     parent_id: int | None = None
     name_ru: str | None = Field(default=None, min_length=1, max_length=100)
     name_tk: str | None = Field(default=None, min_length=1, max_length=100)

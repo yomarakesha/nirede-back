@@ -1,4 +1,4 @@
-"""Management commands. Usage: python -m app.cli create-admin <phone>"""
+"""Management commands: python -m app.cli create-admin <phone> | announce-due"""
 
 import argparse
 import asyncio
@@ -24,10 +24,41 @@ async def create_admin(session: AsyncSession, phone: str) -> User:
     return user
 
 
+async def announce_due(session: AsyncSession) -> int:
+    """Announce approved promotions that have started but were not announced yet.
+
+    Run periodically (e.g. cron every 10 minutes). Returns how many were announced.
+    """
+    from app.modules.notifications.push import get_push_sender, send_all
+    from app.modules.notifications.service import notify_promotion_published, push_messages
+    from app.modules.promotions.models import Promotion, active_clause
+    from app.timeutil import utcnow
+
+    due = list(
+        await session.scalars(
+            select(Promotion).where(active_clause(utcnow()), Promotion.announced_at.is_(None))
+        )
+    )
+    announced = 0
+    for promo in due:
+        notifications = await notify_promotion_published(session, promo)
+        if promo.announced_at is None:
+            # Shop hidden right now: mark it so the job does not retry every run.
+            promo.announced_at = utcnow()
+            await session.commit()
+            continue
+        announced += 1
+        await send_all(await push_messages(session, notifications), get_push_sender())
+    return announced
+
+
 async def _main(args: argparse.Namespace) -> None:
     async with SessionLocal() as session:
-        user = await create_admin(session, args.phone)
-        print(f"admin: id={user.id} phone={user.phone}")
+        if args.command == "create-admin":
+            user = await create_admin(session, args.phone)
+            print(f"admin: id={user.id} phone={user.phone}")
+        elif args.command == "announce-due":
+            print(f"announced: {await announce_due(session)}")
 
 
 def main() -> None:
@@ -35,6 +66,7 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
     admin = sub.add_parser("create-admin", help="create or promote a user to admin")
     admin.add_argument("phone")
+    sub.add_parser("announce-due", help="notify followers about promotions that have started")
     asyncio.run(_main(parser.parse_args()))
 
 

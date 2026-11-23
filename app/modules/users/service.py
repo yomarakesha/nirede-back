@@ -19,6 +19,7 @@ from app.timeutil import utcnow
 
 OTP_PER_MINUTE = 1
 OTP_PER_HOUR = 5
+OTP_PER_DAY = 10
 
 
 def _unauthorized(detail: str) -> HTTPException:
@@ -35,6 +36,7 @@ async def request_otp(session: AsyncSession, phone: str, sms: SmsSender) -> None
     if (
         await _otp_count_since(session, phone, now - timedelta(minutes=1)) >= OTP_PER_MINUTE
         or await _otp_count_since(session, phone, now - timedelta(hours=1)) >= OTP_PER_HOUR
+        or await _otp_count_since(session, phone, now - timedelta(days=1)) >= OTP_PER_DAY
     ):
         raise HTTPException(status.HTTP_409_CONFLICT, "otp_rate_limited")
     code = generate_otp()

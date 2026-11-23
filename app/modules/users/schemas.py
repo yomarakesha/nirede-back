@@ -2,6 +2,7 @@ from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
+from app.common import PatchModel
 from app.enums import Language, UserRole
 from app.phone import normalize_phone
 
@@ -33,8 +34,9 @@ class UserOut(BaseModel):
     notify_my_malls: bool
 
 
-class UserUpdate(BaseModel):
+class UserUpdate(PatchModel):
     model_config = ConfigDict(extra="forbid")
+    non_nullable = frozenset({"language", "notify_favorite_shops", "notify_my_malls"})
 
     name: str | None = Field(default=None, max_length=100)
     language: Language | None = None

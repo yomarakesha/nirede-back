@@ -47,6 +47,8 @@ async def update_mall(
         await get_city_or_404(session, body.city_id)
     apply_update(mall, body)
     service.check_layout(mall)
+    await service.check_shops_fit_layout(session, mall)
+    await service.sync_shop_city(session, mall)
     await session.commit()
     return MallAdminOut.model_validate(mall)
 
@@ -62,7 +64,7 @@ async def replace_photos(
 ) -> MallDetail:
     mall = await service.get_mall_or_404(session, mall_id)
     await service.replace_photos(session, mall, body.paths)
-    return await service.to_detail(session, mall_id)
+    return await service.to_detail(session, mall_id, public=False)
 
 
 @router.put("/{mall_id}/floors")
@@ -71,4 +73,4 @@ async def replace_floors(
 ) -> MallDetail:
     mall = await service.get_mall_or_404(session, mall_id)
     await service.replace_floors(session, mall, body)
-    return await service.to_detail(session, mall_id)
+    return await service.to_detail(session, mall_id, public=False)

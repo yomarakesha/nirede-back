@@ -1,5 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.common import PatchModel
+
 Name = Field(min_length=1, max_length=100)
 
 
@@ -9,7 +11,9 @@ class CityCreate(BaseModel):
     is_active: bool = True
 
 
-class CityUpdate(BaseModel):
+class CityUpdate(PatchModel):
+    non_nullable = frozenset({"name_ru", "name_tk", "is_active"})
+
     name_ru: str | None = Field(default=None, min_length=1, max_length=100)
     name_tk: str | None = Field(default=None, min_length=1, max_length=100)
     is_active: bool | None = None

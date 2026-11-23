@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import HTTPException, status
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud import get_or_404
@@ -132,6 +133,8 @@ async def approve_change_request(
     reason: str | None = None
     if shop_id is None:
         reason = "entity_deleted"
+    elif (await session.get(Shop, shop_id)).owner_id != cr.author_id:
+        reason = "not_owner"
     elif not await has_active_subscription(session, shop_id):
         reason = "subscription_expired"
     else:
@@ -139,7 +142,7 @@ async def approve_change_request(
             data = PAYLOAD_SCHEMAS[cr.entity_type].model_validate(cr.payload)
             async with session.begin_nested():
                 await _apply(session, cr, data)
-        except ValidationError:
+        except (ValidationError, IntegrityError, TypeError, ValueError):
             reason = "invalid_payload"
         except HTTPException as exc:
             reason = str(exc.detail)

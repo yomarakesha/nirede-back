@@ -2,7 +2,7 @@ from datetime import time
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
-from app.common import PhotoOut
+from app.common import PatchModel, PhotoOut
 from app.modules.categories.schemas import CategoryBrief
 from app.modules.malls.models import MallLayout
 from app.storage import media_url
@@ -34,7 +34,20 @@ class MallCreate(MallBase):
         return self
 
 
-class MallUpdate(BaseModel):
+class MallUpdate(PatchModel):
+    non_nullable = frozenset(
+        {
+            "city_id",
+            "name_ru",
+            "name_tk",
+            "address_ru",
+            "address_tk",
+            "layout",
+            "is_active",
+            "sort_order",
+        }
+    )
+
     city_id: int | None = None
     name_ru: str | None = Field(default=None, min_length=1, max_length=100)
     name_tk: str | None = Field(default=None, min_length=1, max_length=100)

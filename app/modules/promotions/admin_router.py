@@ -78,7 +78,7 @@ async def delete_promotion(promo_id: int, _: AdminUser, session: SessionDep) -> 
 async def approve(
     promo_id: int, _: AdminUser, session: SessionDep, background: BackgroundTasks, push: PushDep
 ) -> PromotionOut:
-    promo = await service.get_promotion_or_404(session, promo_id)
+    promo = await service.get_promotion_or_404(session, promo_id, lock=True)
     if await service.set_status(session, promo, ModerationStatus.approved):
         await announce_promotion(session, promo, background, push)
     return await _out(session, promo)
@@ -86,6 +86,6 @@ async def approve(
 
 @router.post("/{promo_id}/reject")
 async def reject(promo_id: int, body: ReviewIn, _: AdminUser, session: SessionDep) -> PromotionOut:
-    promo = await service.get_promotion_or_404(session, promo_id)
+    promo = await service.get_promotion_or_404(session, promo_id, lock=True)
     await service.set_status(session, promo, ModerationStatus.rejected, body.comment)
     return await _out(session, promo)

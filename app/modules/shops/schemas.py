@@ -2,7 +2,7 @@ from datetime import time
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
-from app.common import PhotoOut
+from app.common import PatchModel, PhotoOut
 from app.modules.categories.schemas import CategoryBrief
 from app.modules.malls.schemas import MallRef
 from app.storage import media_url
@@ -10,10 +10,11 @@ from app.storage import media_url
 BRIEF_CATEGORIES = 3
 
 
-class ShopFields(BaseModel):
+class ShopFields(PatchModel):
     """Editable shop fields, all optional; shared by admin update and seller change requests."""
 
     model_config = ConfigDict(extra="forbid")
+    non_nullable = frozenset({"name", "category_ids", "photos"})
 
     name: str | None = Field(default=None, min_length=1, max_length=100)
     logo: str | None = None
@@ -37,6 +38,8 @@ class ShopLocationFields(BaseModel):
 
 
 class ShopUpdate(ShopFields, ShopLocationFields):
+    non_nullable = ShopFields.non_nullable | {"is_active"}
+
     is_active: bool | None = None
 
 

@@ -1,5 +1,5 @@
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -33,6 +33,30 @@ async def get_mall_or_404(
 def check_layout(mall: Mall) -> None:
     if mall.layout == MallLayout.floors and not mall.floors_count:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "floors_count_required")
+
+
+async def check_shops_fit_layout(session: AsyncSession, mall: Mall) -> None:
+    """Refuse a layout/floors change that would leave existing shops with an invalid location."""
+    from app.modules.shops.models import Shop
+
+    if mall.layout == MallLayout.floors:
+        broken = (
+            (Shop.floor.is_(None))
+            | (Shop.floor > (mall.floors_count or 0))
+            | (Shop.row.is_not(None))
+        )
+    else:
+        broken = Shop.row.is_(None) | Shop.floor.is_not(None)
+    found = await session.scalar(select(Shop.id).where(Shop.mall_id == mall.id, broken).limit(1))
+    if found is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "mall_has_shops_outside_layout")
+
+
+async def sync_shop_city(session: AsyncSession, mall: Mall) -> None:
+    """In-mall shops always share the mall's city."""
+    from app.modules.shops.models import Shop
+
+    await session.execute(update(Shop).where(Shop.mall_id == mall.id).values(city_id=mall.city_id))
 
 
 async def replace_photos(session: AsyncSession, mall: Mall, paths: list[str]) -> None:
@@ -93,8 +117,8 @@ async def _shop_stats(session: AsyncSession, mall_id: int) -> tuple[int, list[Ca
     return count, [CategoryBrief.model_validate(c) for c in ordered]
 
 
-async def to_detail(session: AsyncSession, mall_id: int) -> MallDetail:
-    mall = await get_mall_or_404(session, mall_id, public=True, with_children=True)
+async def to_detail(session: AsyncSession, mall_id: int, *, public: bool = True) -> MallDetail:
+    mall = await get_mall_or_404(session, mall_id, public=public, with_children=True)
     shop_count, root_categories = await _shop_stats(session, mall_id)
     return MallDetail(
         **MallListItem.model_validate(mall).model_dump(exclude={"cover", "cover_url"}),

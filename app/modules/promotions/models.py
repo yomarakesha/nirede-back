@@ -29,6 +29,8 @@ class Promotion(TimestampMixin, Base):
         BigInteger, ForeignKey("users.id", ondelete="SET NULL")
     )
     admin_comment: Mapped[str | None] = mapped_column(Text)
+    # Set once followers were notified, so a promotion is never announced twice.
+    announced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 def active_clause(now: datetime):

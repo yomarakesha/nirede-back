@@ -2,13 +2,15 @@ from datetime import datetime
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, computed_field, model_validator
 
+from app.common import PatchModel
 from app.enums import ModerationStatus
 from app.modules.shops.schemas import ShopBrief
 from app.storage import media_url
 
 
-class PromotionUpdate(BaseModel):
+class PromotionUpdate(PatchModel):
     model_config = ConfigDict(extra="forbid")
+    non_nullable = frozenset({"title_ru", "title_tk", "badge", "starts_at", "ends_at"})
 
     title_ru: str | None = Field(default=None, min_length=1, max_length=200)
     title_tk: str | None = Field(default=None, min_length=1, max_length=200)

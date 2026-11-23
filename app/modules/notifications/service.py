@@ -11,6 +11,7 @@ from app.modules.notifications.push import PushMessage, PushSender, send_all
 from app.modules.promotions.models import Promotion
 from app.modules.promotions.service import is_active
 from app.modules.shops.models import Shop
+from app.modules.shops.service import public_shops
 from app.modules.users.models import User, favorite_shops, user_malls
 from app.timeutil import utcnow
 
@@ -34,10 +35,13 @@ async def _recipient_ids(session: AsyncSession, shop: Shop) -> list[int]:
 async def notify_promotion_published(
     session: AsyncSession, promotion: Promotion
 ) -> list[Notification]:
-    """Write feed entries for a promotion that is public now. Future ones are not announced."""
-    if not is_active(promotion):
+    """Write feed entries for a promotion that is public now, once.
+
+    Promotions that start later are picked up by `python -m app.cli announce-due`.
+    """
+    if not is_active(promotion) or promotion.announced_at is not None:
         return []
-    shop = await session.get(Shop, promotion.shop_id)
+    shop = await session.scalar(public_shops().where(Shop.id == promotion.shop_id))
     if shop is None:
         return []
     mall = await session.get(Mall, shop.mall_id) if shop.mall_id else None
@@ -56,6 +60,7 @@ async def notify_promotion_published(
         for user_id in await _recipient_ids(session, shop)
     ]
     session.add_all(notifications)
+    promotion.announced_at = utcnow()
     await session.commit()
     return notifications
 
