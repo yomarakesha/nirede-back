@@ -4,6 +4,8 @@ from fastapi.staticfiles import StaticFiles
 from app.config import get_settings
 from app.modules.cities import admin_router as cities_admin
 from app.modules.cities import router as cities
+from app.modules.malls import admin_router as malls_admin
+from app.modules.malls import router as malls
 from app.modules.uploads import router as uploads
 from app.modules.users.router import auth_router, me_router
 
@@ -22,6 +24,8 @@ def create_app() -> FastAPI:
         me_router,
         cities.router,
         cities_admin.router,
+        malls.router,
+        malls_admin.router,
         uploads.admin_router,
         uploads.seller_router,
     ]
