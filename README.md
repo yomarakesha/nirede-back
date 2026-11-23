@@ -25,6 +25,12 @@ uv run uvicorn app.main:app --reload
 
 Всё в Docker: `docker compose up --build` (API на :8000, миграции применяются при старте).
 
+## Postman
+
+`postman/collections/nirede.postman_collection.json` и окружение `postman/environments/local.postman_environment.json` —
+импортируйте в Postman. Инструкция по входу в описании коллекции. После изменения API пересоберите:
+`uv run python scripts/gen_postman.py`.
+
 ## Тесты и линтер
 
 ```bash

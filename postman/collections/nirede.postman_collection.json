@@ -1,0 +1,4049 @@
+{
+  "info": {
+    "_postman_id": "80c70572-a116-422d-8150-bc9b8a9616ce",
+    "name": "Nirede API",
+    "description": "REST API Nirede: где в Ашхабаде продаётся нужная категория товаров.\n\n**Как начать**\n1. Запустите backend (`docker compose up --build`), Swagger: {{baseUrl}}/docs.\n2. `1. Auth → POST /auth/otp/request` с `{{phone}}`. Код SMS пока пишется в лог сервера\n   (`docker compose logs api | grep Nirede:`). Впишите его в переменную `otp_code`.\n3. `POST /auth/otp/verify` — токены сохранятся в переменные коллекции автоматически.\n4. Для админских запросов: создайте админа `uv run python -m app.cli create-admin +993...`,\n   поставьте `login_as = admin` и войдите этим телефоном — токен ляжет в `admin_access_token`.\n   Верните `login_as = user` для обычного пользователя.\n\n**Соглашения**\n- Все тексты парой полей `*_ru` / `*_tk`; клиент выбирает язык сам.\n- Списки: `?limit=&offset=` → `{\"items\": [...], \"total\": N}`.\n- Ошибки: `{\"detail\": \"код_ошибки\"}` (например `otp_invalid`, `subscription_required`, `already_reviewed`).\n- Картинки: сначала `POST /admin/uploads` или `/seller/uploads` (multipart `file`), затем путь `path`\n  передаётся в поля `photos`, `logo`, `image`, `icon`. Полный адрес — поле `*_url` в ответах.\n- Время работы в часовом поясе Asia/Ashgabat; даты акций — ISO 8601 с часовым поясом.\n- Созданные объекты (POST в Admin/Seller) сохраняют свой id в переменные (`mall_id`, `shop_id`, ...).\n",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "phone",
+      "value": "+99365123456"
+    },
+    {
+      "key": "otp_code",
+      "value": ""
+    },
+    {
+      "key": "login_as",
+      "value": "user"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "admin_access_token",
+      "value": ""
+    },
+    {
+      "key": "refresh_token",
+      "value": ""
+    },
+    {
+      "key": "city_id",
+      "value": ""
+    },
+    {
+      "key": "mall_id",
+      "value": ""
+    },
+    {
+      "key": "category_id",
+      "value": ""
+    },
+    {
+      "key": "shop_id",
+      "value": ""
+    },
+    {
+      "key": "promotion_id",
+      "value": ""
+    },
+    {
+      "key": "application_id",
+      "value": ""
+    },
+    {
+      "key": "change_request_id",
+      "value": ""
+    },
+    {
+      "key": "user_id",
+      "value": ""
+    },
+    {
+      "key": "notification_id",
+      "value": ""
+    },
+    {
+      "key": "device_token",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "health"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Auth (вход по SMS-коду)",
+      "item": [
+        {
+          "name": "POST /auth/otp/request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/otp/request",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "otp",
+                "request"
+              ]
+            },
+            "description": "Request Otp",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{phone}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /auth/otp/verify",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test(\"tokens issued\", () => pm.expect(body.access_token).to.be.a(\"string\"));",
+                  "const prefix = pm.variables.get(\"login_as\") === \"admin\" ? \"admin_\" : \"\";",
+                  "pm.collectionVariables.set(prefix + \"access_token\", body.access_token);",
+                  "pm.collectionVariables.set(\"refresh_token\", body.refresh_token);",
+                  "if (body.user) { pm.collectionVariables.set(\"user_id\", body.user.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/otp/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "otp",
+                "verify"
+              ]
+            },
+            "description": "Verify Otp",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"code\": \"{{otp_code}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /auth/refresh",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test(\"tokens issued\", () => pm.expect(body.access_token).to.be.a(\"string\"));",
+                  "const prefix = pm.variables.get(\"login_as\") === \"admin\" ? \"admin_\" : \"\";",
+                  "pm.collectionVariables.set(prefix + \"access_token\", body.access_token);",
+                  "pm.collectionVariables.set(\"refresh_token\", body.refresh_token);",
+                  "if (body.user) { pm.collectionVariables.set(\"user_id\", body.user.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Refresh",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /auth/logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Logout",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "auth": {
+        "type": "noauth"
+      }
+    },
+    {
+      "name": "2. Me (профиль, избранное, уведомления)",
+      "item": [
+        {
+          "name": "GET /me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me"
+              ]
+            },
+            "description": "Get Me"
+          }
+        },
+        {
+          "name": "PATCH /me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me"
+              ]
+            },
+            "description": "Patch Me",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Аман\",\n  \"language\": \"ru\",\n  \"notify_favorite_shops\": true,\n  \"notify_my_malls\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /me/favorites",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/favorites",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "favorites"
+              ]
+            },
+            "description": "List Favorites"
+          }
+        },
+        {
+          "name": "PUT /me/favorites/{shop_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/favorites/:shop_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "favorites",
+                ":shop_id"
+              ],
+              "variable": [
+                {
+                  "key": "shop_id",
+                  "value": "{{shop_id}}"
+                }
+              ]
+            },
+            "description": "Add Favorite"
+          }
+        },
+        {
+          "name": "DELETE /me/favorites/{shop_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/favorites/:shop_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "favorites",
+                ":shop_id"
+              ],
+              "variable": [
+                {
+                  "key": "shop_id",
+                  "value": "{{shop_id}}"
+                }
+              ]
+            },
+            "description": "Remove Favorite"
+          }
+        },
+        {
+          "name": "GET /me/malls",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/malls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "malls"
+              ]
+            },
+            "description": "List My Malls"
+          }
+        },
+        {
+          "name": "PUT /me/malls/{mall_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/malls/:mall_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "malls",
+                ":mall_id"
+              ],
+              "variable": [
+                {
+                  "key": "mall_id",
+                  "value": "{{mall_id}}"
+                }
+              ]
+            },
+            "description": "Add My Mall"
+          }
+        },
+        {
+          "name": "DELETE /me/malls/{mall_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/malls/:mall_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "malls",
+                ":mall_id"
+              ],
+              "variable": [
+                {
+                  "key": "mall_id",
+                  "value": "{{mall_id}}"
+                }
+              ]
+            },
+            "description": "Remove My Mall"
+          }
+        },
+        {
+          "name": "GET /me/notifications",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "offset",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                }
+              ]
+            },
+            "description": "List Notifications"
+          }
+        },
+        {
+          "name": "GET /me/notifications/unread-count",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/notifications/unread-count",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "notifications",
+                "unread-count"
+              ]
+            },
+            "description": "Unread Count"
+          }
+        },
+        {
+          "name": "POST /me/notifications/read-all",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/notifications/read-all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "notifications",
+                "read-all"
+              ]
+            },
+            "description": "Read All"
+          }
+        },
+        {
+          "name": "POST /me/notifications/{notification_id}/read",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/notifications/:notification_id/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "notifications",
+                ":notification_id",
+                "read"
+              ],
+              "variable": [
+                {
+                  "key": "notification_id",
+                  "value": "{{notification_id}}"
+                }
+              ]
+            },
+            "description": "Read One"
+          }
+        },
+        {
+          "name": "POST /me/devices",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/devices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "devices"
+              ]
+            },
+            "description": "Register Device",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{device_token}}\",\n  \"platform\": \"android\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "DELETE /me/devices/{token}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/devices/:token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "devices",
+                ":token"
+              ],
+              "variable": [
+                {
+                  "key": "token",
+                  "value": "{{device_token}}"
+                }
+              ]
+            },
+            "description": "Remove Device"
+          }
+        },
+        {
+          "name": "GET /me/seller-applications",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/seller-applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "seller-applications"
+              ]
+            },
+            "description": "My Applications"
+          }
+        },
+        {
+          "name": "POST /me/seller-applications",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set(\"application_id\", pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/seller-applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "seller-applications"
+              ]
+            },
+            "description": "Submit",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shop_id\": null,\n  \"shop_name\": \"Moda Line\",\n  \"mall_id\": {{mall_id}},\n  \"floor\": 2,\n  \"number\": \"214\",\n  \"contact_phone\": \"{{phone}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{access_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "3. Public: города",
+      "item": [
+        {
+          "name": "GET /cities",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cities",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cities"
+              ]
+            },
+            "description": "List Cities"
+          }
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{access_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "3. Public: торговые центры",
+      "item": [
+        {
+          "name": "GET /malls",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/malls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "malls"
+              ],
+              "query": [
+                {
+                  "key": "city_id",
+                  "value": "{{city_id}}",
+                  "disabled": true,
+                  "description": ""
+                }
+              ]
+            },
+            "description": "List Malls"
+          }
+        },
+        {
+          "name": "GET /malls/{mall_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/malls/:mall_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "malls",
+                ":mall_id"
+              ],
+              "variable": [
+                {
+                  "key": "mall_id",
+                  "value": "{{mall_id}}"
+                }
+              ]
+            },
+            "description": "Get Mall"
+          }
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{access_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "3. Public: категории",
+      "item": [
+        {
+          "name": "GET /categories",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "categories"
+              ]
+            },
+            "description": "List Roots"
+          }
+        },
+        {
+          "name": "GET /categories/tree",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/categories/tree",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "categories",
+                "tree"
+              ]
+            },
+            "description": "Tree"
+          }
+        },
+        {
+          "name": "GET /categories/{category_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/categories/:category_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "categories",
+                ":category_id"
+              ],
+              "variable": [
+                {
+                  "key": "category_id",
+                  "value": "{{category_id}}"
+                }
+              ]
+            },
+            "description": "Get Category"
+          }
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{access_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "3. Public: магазины",
+      "item": [
+        {
+          "name": "GET /shops/{shop_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/shops/:shop_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "shops",
+                ":shop_id"
+              ],
+              "variable": [
+                {
+                  "key": "shop_id",
+                  "value": "{{shop_id}}"
+                }
+              ]
+            },
+            "description": "Get Shop"
+          }
+        },
+        {
+          "name": "GET /malls/{mall_id}/shops",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/malls/:mall_id/shops",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "malls",
+                ":mall_id",
+                "shops"
+              ],
+              "query": [
+                {
+                  "key": "floor",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "row",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "category_id",
+                  "value": "{{category_id}}",
+                  "disabled": true,
+                  "description": ""
+                }
+              ],
+              "variable": [
+                {
+                  "key": "mall_id",
+                  "value": "{{mall_id}}"
+                }
+              ]
+            },
+            "description": "Mall Shops"
+          }
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{access_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "3. Public: поиск",
+      "item": [
+        {
+          "name": "GET /search/suggest",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/search/suggest",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "search",
+                "suggest"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "",
+                  "disabled": false,
+                  "description": ""
+                },
+                {
+                  "key": "city_id",
+                  "value": "{{city_id}}",
+                  "disabled": true,
+                  "description": ""
+                }
+              ]
+            },
+            "description": "Suggest"
+          }
+        },
+        {
+          "name": "GET /search",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/search",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "category_id",
+                  "value": "{{category_id}}",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "q",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "city_id",
+                  "value": "{{city_id}}",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "mall_id",
+                  "value": "{{mall_id}}",
+                  "disabled": true,
+                  "description": ""
+                }
+              ]
+            },
+            "description": "Search"
+          }
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{access_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "3. Public: акции",
+      "item": [
+        {
+          "name": "GET /promotions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/promotions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "promotions"
+              ],
+              "query": [
+                {
+                  "key": "city_id",
+                  "value": "{{city_id}}",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "mall_id",
+                  "value": "{{mall_id}}",
+                  "disabled": true,
+                  "description": ""
+                }
+              ]
+            },
+            "description": "List Promotions"
+          }
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{access_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "4. Seller (кабинет продавца)",
+      "item": [
+        {
+          "name": "GET /seller/shops",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/seller/shops",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "seller",
+                "shops"
+              ]
+            },
+            "description": "My Shops"
+          }
+        },
+        {
+          "name": "POST /seller/shops/{shop_id}/change-requests",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set(\"change_request_id\", pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/seller/shops/:shop_id/change-requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "seller",
+                "shops",
+                ":shop_id",
+                "change-requests"
+              ],
+              "variable": [
+                {
+                  "key": "shop_id",
+                  "value": "{{shop_id}}"
+                }
+              ]
+            },
+            "description": "Request Shop Change",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"how_to_find_ru\": \"Новый текст «как найти»\",\n  \"category_ids\": [\n    {{category_id}}\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /seller/change-requests",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/seller/change-requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "seller",
+                "change-requests"
+              ]
+            },
+            "description": "My Change Requests"
+          }
+        },
+        {
+          "name": "POST /seller/shops/{shop_id}/promotions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set(\"promotion_id\", pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/seller/shops/:shop_id/promotions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "seller",
+                "shops",
+                ":shop_id",
+                "promotions"
+              ],
+              "variable": [
+                {
+                  "key": "shop_id",
+                  "value": "{{shop_id}}"
+                }
+              ]
+            },
+            "description": "Create Promotion",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title_ru\": \"2+1 на платья\",\n  \"title_tk\": \"Köýneklere 2+1\",\n  \"badge\": \"2+1\",\n  \"starts_at\": \"2026-11-23T00:00:00+05:00\",\n  \"ends_at\": \"2026-12-05T23:59:00+05:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /seller/promotions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/seller/promotions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "seller",
+                "promotions"
+              ]
+            },
+            "description": "My Promotions"
+          }
+        },
+        {
+          "name": "POST /seller/promotions/{promo_id}/change-requests",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set(\"change_request_id\", pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/seller/promotions/:promo_id/change-requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "seller",
+                "promotions",
+                ":promo_id",
+                "change-requests"
+              ],
+              "variable": [
+                {
+                  "key": "promo_id",
+                  "value": "{{promotion_id}}"
+                }
+              ]
+            },
+            "description": "Request Promotion Change",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title_ru\": \"2+1 на все платья\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /seller/uploads",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/seller/uploads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "seller",
+                "uploads"
+              ]
+            },
+            "description": "Seller Upload",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{access_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "5. Admin",
+      "item": [
+        {
+          "name": "GET /admin/cities",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/cities",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "cities"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "offset",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                }
+              ]
+            },
+            "description": "List Cities"
+          }
+        },
+        {
+          "name": "POST /admin/cities",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set(\"city_id\", pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/cities",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "cities"
+              ]
+            },
+            "description": "Create City",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name_ru\": \"Ашхабад\",\n  \"name_tk\": \"Aşgabat\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /admin/cities/{city_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/cities/:city_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "cities",
+                ":city_id"
+              ],
+              "variable": [
+                {
+                  "key": "city_id",
+                  "value": "{{city_id}}"
+                }
+              ]
+            },
+            "description": "Get City"
+          }
+        },
+        {
+          "name": "PATCH /admin/cities/{city_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/cities/:city_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "cities",
+                ":city_id"
+              ],
+              "variable": [
+                {
+                  "key": "city_id",
+                  "value": "{{city_id}}"
+                }
+              ]
+            },
+            "description": "Update City",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "DELETE /admin/cities/{city_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/cities/:city_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "cities",
+                ":city_id"
+              ],
+              "variable": [
+                {
+                  "key": "city_id",
+                  "value": "{{city_id}}"
+                }
+              ]
+            },
+            "description": "Delete City"
+          }
+        },
+        {
+          "name": "GET /admin/malls",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/malls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "malls"
+              ],
+              "query": [
+                {
+                  "key": "city_id",
+                  "value": "{{city_id}}",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "limit",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "offset",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                }
+              ]
+            },
+            "description": "List Malls"
+          }
+        },
+        {
+          "name": "POST /admin/malls",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set(\"mall_id\", pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/malls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "malls"
+              ]
+            },
+            "description": "Create Mall",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"city_id\": {{city_id}},\n  \"name_ru\": \"Беркарар\",\n  \"name_tk\": \"Berkarar\",\n  \"address_ru\": \"ул. Ататюрка, 80\",\n  \"address_tk\": \"Atatürk köçesi, 80\",\n  \"phone\": \"+99312000000\",\n  \"opens_at\": \"09:00\",\n  \"closes_at\": \"23:00\",\n  \"layout\": \"floors\",\n  \"floors_count\": 4\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /admin/malls/{mall_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/malls/:mall_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "malls",
+                ":mall_id"
+              ],
+              "variable": [
+                {
+                  "key": "mall_id",
+                  "value": "{{mall_id}}"
+                }
+              ]
+            },
+            "description": "Get Mall"
+          }
+        },
+        {
+          "name": "PATCH /admin/malls/{mall_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/malls/:mall_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "malls",
+                ":mall_id"
+              ],
+              "variable": [
+                {
+                  "key": "mall_id",
+                  "value": "{{mall_id}}"
+                }
+              ]
+            },
+            "description": "Update Mall",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"closes_at\": \"22:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "DELETE /admin/malls/{mall_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/malls/:mall_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "malls",
+                ":mall_id"
+              ],
+              "variable": [
+                {
+                  "key": "mall_id",
+                  "value": "{{mall_id}}"
+                }
+              ]
+            },
+            "description": "Delete Mall"
+          }
+        },
+        {
+          "name": "PUT /admin/malls/{mall_id}/photos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/malls/:mall_id/photos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "malls",
+                ":mall_id",
+                "photos"
+              ],
+              "variable": [
+                {
+                  "key": "mall_id",
+                  "value": "{{mall_id}}"
+                }
+              ]
+            },
+            "description": "Replace Photos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paths\": [\n    \"2026/11/example.webp\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "PUT /admin/malls/{mall_id}/floors",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/malls/:mall_id/floors",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "malls",
+                ":mall_id",
+                "floors"
+              ],
+              "variable": [
+                {
+                  "key": "mall_id",
+                  "value": "{{mall_id}}"
+                }
+              ]
+            },
+            "description": "Replace Floors",
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"number\": 1,\n    \"summary_ru\": \"Супермаркет, обувь, телефоны\",\n    \"summary_tk\": \"Supermarket, aýakgap, telefonlar\"\n  },\n  {\n    \"number\": 2,\n    \"summary_ru\": \"Одежда, сумки, аксессуары\",\n    \"summary_tk\": \"Eşikler, sumkalar\"\n  }\n]",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /admin/categories",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "categories"
+              ],
+              "query": [
+                {
+                  "key": "parent_id",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "limit",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "offset",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                }
+              ]
+            },
+            "description": "List Categories"
+          }
+        },
+        {
+          "name": "POST /admin/categories",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set(\"category_id\", pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "categories"
+              ]
+            },
+            "description": "Create Category",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parent_id\": null,\n  \"name_ru\": \"Женщинам\",\n  \"name_tk\": \"Aýallara\",\n  \"slug\": \"women\",\n  \"search_aliases_ru\": null,\n  \"search_aliases_tk\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /admin/categories/{category_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/categories/:category_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "categories",
+                ":category_id"
+              ],
+              "variable": [
+                {
+                  "key": "category_id",
+                  "value": "{{category_id}}"
+                }
+              ]
+            },
+            "description": "Get Category"
+          }
+        },
+        {
+          "name": "PATCH /admin/categories/{category_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/categories/:category_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "categories",
+                ":category_id"
+              ],
+              "variable": [
+                {
+                  "key": "category_id",
+                  "value": "{{category_id}}"
+                }
+              ]
+            },
+            "description": "Update Category",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"search_aliases_ru\": \"женское пальто женские пальто\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "DELETE /admin/categories/{category_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/categories/:category_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "categories",
+                ":category_id"
+              ],
+              "variable": [
+                {
+                  "key": "category_id",
+                  "value": "{{category_id}}"
+                }
+              ]
+            },
+            "description": "Delete Category"
+          }
+        },
+        {
+          "name": "GET /admin/shops",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/shops",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "shops"
+              ],
+              "query": [
+                {
+                  "key": "mall_id",
+                  "value": "{{mall_id}}",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "city_id",
+                  "value": "{{city_id}}",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "q",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "limit",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "offset",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                }
+              ]
+            },
+            "description": "List Shops"
+          }
+        },
+        {
+          "name": "POST /admin/shops",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set(\"shop_id\", pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/shops",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "shops"
+              ]
+            },
+            "description": "Create Shop",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Moda Line\",\n  \"mall_id\": {{mall_id}},\n  \"floor\": 2,\n  \"number\": \"214\",\n  \"phone\": \"+99365123456\",\n  \"opens_at\": \"10:00\",\n  \"closes_at\": \"22:00\",\n  \"how_to_find_ru\": \"От главного входа на эскалаторе на 2 этаж, налево до № 214.\",\n  \"how_to_find_tk\": \"Esasy girelgeden eskalator bilen 2-nji gata, çepe № 214.\",\n  \"category_ids\": [\n    {{category_id}}\n  ],\n  \"photos\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /admin/shops/{shop_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/shops/:shop_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "shops",
+                ":shop_id"
+              ],
+              "variable": [
+                {
+                  "key": "shop_id",
+                  "value": "{{shop_id}}"
+                }
+              ]
+            },
+            "description": "Get Shop"
+          }
+        },
+        {
+          "name": "PATCH /admin/shops/{shop_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/shops/:shop_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "shops",
+                ":shop_id"
+              ],
+              "variable": [
+                {
+                  "key": "shop_id",
+                  "value": "{{shop_id}}"
+                }
+              ]
+            },
+            "description": "Update Shop",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+99365000000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "DELETE /admin/shops/{shop_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/shops/:shop_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "shops",
+                ":shop_id"
+              ],
+              "variable": [
+                {
+                  "key": "shop_id",
+                  "value": "{{shop_id}}"
+                }
+              ]
+            },
+            "description": "Delete Shop"
+          }
+        },
+        {
+          "name": "GET /admin/promotions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/promotions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "promotions"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "shop_id",
+                  "value": "{{shop_id}}",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "limit",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "offset",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                }
+              ]
+            },
+            "description": "List Promotions"
+          }
+        },
+        {
+          "name": "POST /admin/promotions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set(\"promotion_id\", pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/promotions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "promotions"
+              ]
+            },
+            "description": "Create Promotion",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shop_id\": {{shop_id}},\n  \"title_ru\": \"−30% на пальто и пуховики\",\n  \"title_tk\": \"Paltolara we puhowiklere −30%\",\n  \"badge\": \"−30%\",\n  \"starts_at\": \"2026-11-23T00:00:00+05:00\",\n  \"ends_at\": \"2026-12-03T23:59:00+05:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /admin/promotions/{promo_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/promotions/:promo_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "promotions",
+                ":promo_id"
+              ],
+              "variable": [
+                {
+                  "key": "promo_id",
+                  "value": "{{promotion_id}}"
+                }
+              ]
+            },
+            "description": "Get Promotion"
+          }
+        },
+        {
+          "name": "PATCH /admin/promotions/{promo_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/promotions/:promo_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "promotions",
+                ":promo_id"
+              ],
+              "variable": [
+                {
+                  "key": "promo_id",
+                  "value": "{{promotion_id}}"
+                }
+              ]
+            },
+            "description": "Update Promotion",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"badge\": \"2+1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "DELETE /admin/promotions/{promo_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/promotions/:promo_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "promotions",
+                ":promo_id"
+              ],
+              "variable": [
+                {
+                  "key": "promo_id",
+                  "value": "{{promotion_id}}"
+                }
+              ]
+            },
+            "description": "Delete Promotion"
+          }
+        },
+        {
+          "name": "POST /admin/promotions/{promo_id}/approve",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/promotions/:promo_id/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "promotions",
+                ":promo_id",
+                "approve"
+              ],
+              "variable": [
+                {
+                  "key": "promo_id",
+                  "value": "{{promotion_id}}"
+                }
+              ]
+            },
+            "description": "Approve"
+          }
+        },
+        {
+          "name": "POST /admin/promotions/{promo_id}/reject",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/promotions/:promo_id/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "promotions",
+                ":promo_id",
+                "reject"
+              ],
+              "variable": [
+                {
+                  "key": "promo_id",
+                  "value": "{{promotion_id}}"
+                }
+              ]
+            },
+            "description": "Reject",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Добавьте фото\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /admin/seller-applications",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/seller-applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "seller-applications"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "limit",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "offset",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                }
+              ]
+            },
+            "description": "List Applications"
+          }
+        },
+        {
+          "name": "POST /admin/seller-applications/{app_id}/approve",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/seller-applications/:app_id/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "seller-applications",
+                ":app_id",
+                "approve"
+              ],
+              "variable": [
+                {
+                  "key": "app_id",
+                  "value": "{{application_id}}"
+                }
+              ]
+            },
+            "description": "Approve",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shop\": null,\n  \"subscription\": {\n    \"amount\": \"30\",\n    \"days\": 30\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /admin/seller-applications/{app_id}/reject",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/seller-applications/:app_id/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "seller-applications",
+                ":app_id",
+                "reject"
+              ],
+              "variable": [
+                {
+                  "key": "app_id",
+                  "value": "{{application_id}}"
+                }
+              ]
+            },
+            "description": "Reject",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Не дозвонились\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /admin/shops/{shop_id}/subscriptions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/shops/:shop_id/subscriptions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "shops",
+                ":shop_id",
+                "subscriptions"
+              ],
+              "variable": [
+                {
+                  "key": "shop_id",
+                  "value": "{{shop_id}}"
+                }
+              ]
+            },
+            "description": "Create Subscription",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": \"30\",\n  \"days\": 30,\n  \"note\": \"оплата наличными\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /admin/shops/{shop_id}/subscriptions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/shops/:shop_id/subscriptions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "shops",
+                ":shop_id",
+                "subscriptions"
+              ],
+              "variable": [
+                {
+                  "key": "shop_id",
+                  "value": "{{shop_id}}"
+                }
+              ]
+            },
+            "description": "List Subscriptions"
+          }
+        },
+        {
+          "name": "GET /admin/users",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "role",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "q",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "limit",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "offset",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                }
+              ]
+            },
+            "description": "List Users"
+          }
+        },
+        {
+          "name": "PATCH /admin/users/{user_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users/:user_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                ":user_id"
+              ],
+              "variable": [
+                {
+                  "key": "user_id",
+                  "value": "{{user_id}}"
+                }
+              ]
+            },
+            "description": "Set Role",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"seller\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /admin/change-requests",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/change-requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "change-requests"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "entity_type",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "limit",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "offset",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                }
+              ]
+            },
+            "description": "List Change Requests"
+          }
+        },
+        {
+          "name": "POST /admin/change-requests/{cr_id}/approve",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/change-requests/:cr_id/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "change-requests",
+                ":cr_id",
+                "approve"
+              ],
+              "variable": [
+                {
+                  "key": "cr_id",
+                  "value": "{{change_request_id}}"
+                }
+              ]
+            },
+            "description": "Approve"
+          }
+        },
+        {
+          "name": "POST /admin/change-requests/{cr_id}/reject",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/change-requests/:cr_id/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "change-requests",
+                ":cr_id",
+                "reject"
+              ],
+              "variable": [
+                {
+                  "key": "cr_id",
+                  "value": "{{change_request_id}}"
+                }
+              ]
+            },
+            "description": "Reject",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Опечатка в адресе\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /admin/uploads",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/uploads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "uploads"
+              ]
+            },
+            "description": "Admin Upload",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{admin_access_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    }
+  ]
+}
