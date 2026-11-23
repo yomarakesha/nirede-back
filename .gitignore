@@ -1,0 +1,8 @@
+.superpowers/
+.venv/
+__pycache__/
+*.pyc
+.env
+media/
+.pytest_cache/
+.ruff_cache/
