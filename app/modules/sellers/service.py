@@ -121,8 +121,19 @@ async def reject_application(
 
 
 async def pending_change_counts(session: AsyncSession, shop_ids: list[int]) -> dict[int, int]:
-    """Filled in by the moderation module; no change requests exist before it."""
-    return {}
+    # Imported here: moderation depends on this module.
+    from app.modules.moderation.models import ChangeRequest, EntityType
+
+    rows = await session.execute(
+        select(ChangeRequest.entity_id, func.count())
+        .where(
+            ChangeRequest.entity_type == EntityType.shop,
+            ChangeRequest.entity_id.in_(shop_ids),
+            ChangeRequest.status == ModerationStatus.pending,
+        )
+        .group_by(ChangeRequest.entity_id)
+    )
+    return dict(rows.all())
 
 
 async def seller_shops(session: AsyncSession, user: User) -> list[SellerShopOut]:

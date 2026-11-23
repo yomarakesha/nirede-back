@@ -8,12 +8,14 @@ from app.modules.cities import admin_router as cities_admin
 from app.modules.cities import router as cities
 from app.modules.malls import admin_router as malls_admin
 from app.modules.malls import router as malls
+from app.modules.moderation import admin_router as moderation_admin
 from app.modules.notifications import router as notifications
 from app.modules.promotions import admin_router as promotions_admin
 from app.modules.promotions import router as promotions
 from app.modules.search import router as search
 from app.modules.sellers import admin_router as sellers_admin
 from app.modules.sellers import router as sellers
+from app.modules.sellers import seller_router
 from app.modules.shops import admin_router as shops_admin
 from app.modules.shops import router as shops
 from app.modules.uploads import router as uploads
@@ -49,6 +51,8 @@ def create_app() -> FastAPI:
         sellers.seller_router,
         sellers_admin.router,
         users_admin.router,
+        seller_router.router,
+        moderation_admin.router,
         uploads.admin_router,
         uploads.seller_router,
     ]

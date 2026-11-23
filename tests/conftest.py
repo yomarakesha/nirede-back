@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from types import SimpleNamespace
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -9,6 +10,7 @@ import app.models  # noqa: F401  registers all models on Base.metadata
 from app.config import get_settings
 from app.db import Base, get_session
 from app.main import create_app
+from tests.factories import auth_headers, make_admin, make_city, make_mall, make_shop, make_user
 
 
 @pytest.fixture(scope="session")
@@ -51,3 +53,30 @@ def app(session):
 async def client(app) -> AsyncIterator[AsyncClient]:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
+
+
+@pytest.fixture
+async def seller_world(session):
+    admin = await make_admin(session)
+    seller = await make_user(session, phone="+99365000011", role="seller")
+    city = await make_city(session)
+    mall = await make_mall(session, city)
+    shop = await make_shop(
+        session,
+        "Moda Line",
+        mall=mall,
+        floor=2,
+        number="214",
+        owner_id=seller.id,
+        premium=True,
+        how_to_find_ru="Старый текст",
+    )
+    return SimpleNamespace(
+        admin=admin,
+        ah=auth_headers(admin),
+        seller=seller,
+        sh=auth_headers(seller),
+        city=city,
+        mall=mall,
+        shop=shop,
+    )
