@@ -1,9 +1,11 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, BackgroundTasks, status
 from sqlalchemy import select
 
 from app.crud import paginate
 from app.deps import AdminUser, SessionDep
 from app.enums import ModerationStatus
+from app.modules.notifications.router import PushDep
+from app.modules.notifications.service import announce_promotion
 from app.modules.promotions import service
 from app.modules.promotions.models import Promotion
 from app.modules.promotions.schemas import (
@@ -40,10 +42,15 @@ async def list_promotions(
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_promotion(
-    body: PromotionCreate, admin: AdminUser, session: SessionDep
+    body: PromotionCreate,
+    admin: AdminUser,
+    session: SessionDep,
+    background: BackgroundTasks,
+    push: PushDep,
 ) -> PromotionOut:
     shop = await service.shop_for_promotion(session, body.shop_id)
     promo = await service.create_promotion(session, shop, body, admin, approved=True)
+    await announce_promotion(session, promo, background, push)
     return await _out(session, promo)
 
 
@@ -68,9 +75,12 @@ async def delete_promotion(promo_id: int, _: AdminUser, session: SessionDep) -> 
 
 
 @router.post("/{promo_id}/approve")
-async def approve(promo_id: int, _: AdminUser, session: SessionDep) -> PromotionOut:
+async def approve(
+    promo_id: int, _: AdminUser, session: SessionDep, background: BackgroundTasks, push: PushDep
+) -> PromotionOut:
     promo = await service.get_promotion_or_404(session, promo_id)
-    await service.set_status(session, promo, ModerationStatus.approved)
+    if await service.set_status(session, promo, ModerationStatus.approved):
+        await announce_promotion(session, promo, background, push)
     return await _out(session, promo)
 
 
