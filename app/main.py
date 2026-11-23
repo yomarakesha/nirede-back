@@ -12,9 +12,12 @@ from app.modules.notifications import router as notifications
 from app.modules.promotions import admin_router as promotions_admin
 from app.modules.promotions import router as promotions
 from app.modules.search import router as search
+from app.modules.sellers import admin_router as sellers_admin
+from app.modules.sellers import router as sellers
 from app.modules.shops import admin_router as shops_admin
 from app.modules.shops import router as shops
 from app.modules.uploads import router as uploads
+from app.modules.users import admin_router as users_admin
 from app.modules.users.router import auth_router, me_router
 
 API_PREFIX = "/api/v1"
@@ -42,6 +45,10 @@ def create_app() -> FastAPI:
         promotions.router,
         promotions_admin.router,
         notifications.router,
+        sellers.me_router,
+        sellers.seller_router,
+        sellers_admin.router,
+        users_admin.router,
         uploads.admin_router,
         uploads.seller_router,
     ]
