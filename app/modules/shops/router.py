@@ -1,20 +1,22 @@
 from fastapi import APIRouter
 from sqlalchemy import func, select
 
-from app.deps import SessionDep
+from app.deps import OptionalUser, SessionDep
 from app.modules.categories.service import subtree_ids
 from app.modules.malls.service import get_mall_or_404
 from app.modules.shops import service
 from app.modules.shops.models import Shop, shop_categories
 from app.modules.shops.schemas import MallShopsOut, ShopDetail
+from app.modules.users.favorites import is_favorite
 
 router = APIRouter(tags=["shops"])
 
 
 @router.get("/shops/{shop_id}")
-async def get_shop(shop_id: int, session: SessionDep) -> ShopDetail:
+async def get_shop(shop_id: int, session: SessionDep, user: OptionalUser) -> ShopDetail:
     shop = await service.get_shop_or_404(session, shop_id, public=True)
-    return await service.load_detail(session, shop)
+    detail = await service.load_detail(session, shop)
+    return detail.model_copy(update={"is_saved": await is_favorite(session, user, shop_id)})
 
 
 @router.get("/malls/{mall_id}/shops")

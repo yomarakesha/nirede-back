@@ -75,6 +75,7 @@ class ShopDetail(ShopBrief):
     how_to_find_tk: str | None
     photos: list[PhotoOut]
     is_open_now: bool
+    is_saved: bool = False
 
 
 class ShopAdminOut(ShopDetail):

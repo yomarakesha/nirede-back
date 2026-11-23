@@ -1,6 +1,16 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base, TimestampMixin, str_enum
@@ -36,3 +46,23 @@ class RefreshToken(TimestampMixin, Base):
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+def _user_link(name: str, target: str) -> Table:
+    return Table(
+        name,
+        Base.metadata,
+        Column("user_id", BigInteger, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+        Column(
+            f"{target}_id",
+            BigInteger,
+            ForeignKey(f"{target}s.id", ondelete="CASCADE"),
+            primary_key=True,
+            index=True,
+        ),
+        Column("created_at", DateTime(timezone=True), server_default=func.now()),
+    )
+
+
+favorite_shops = _user_link("favorite_shops", "shop")
+user_malls = _user_link("user_malls", "mall")

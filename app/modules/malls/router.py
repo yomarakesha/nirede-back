@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.deps import SessionDep
+from app.deps import OptionalUser, SessionDep
 from app.modules.malls import service
 from app.modules.malls.models import Mall
 from app.modules.malls.schemas import MallDetail, MallListItem
@@ -17,5 +17,8 @@ async def list_malls(session: SessionDep, city_id: int | None = None) -> list[Ma
 
 
 @router.get("/{mall_id}")
-async def get_mall(mall_id: int, session: SessionDep) -> MallDetail:
-    return await service.to_detail(session, mall_id)
+async def get_mall(mall_id: int, session: SessionDep, user: OptionalUser) -> MallDetail:
+    from app.modules.users.favorites import is_my_mall  # users depends on malls
+
+    detail = await service.to_detail(session, mall_id)
+    return detail.model_copy(update={"is_saved": await is_my_mall(session, user, mall_id)})

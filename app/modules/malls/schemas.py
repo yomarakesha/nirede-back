@@ -103,3 +103,4 @@ class MallDetail(MallListItem):
     is_open_now: bool
     shop_count: int = 0
     root_categories: list[CategoryBrief] = []
+    is_saved: bool = False

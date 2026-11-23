@@ -3,7 +3,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, status
 
 from app.deps import CurrentUser, SessionDep
-from app.modules.users import service
+from app.modules.malls.schemas import MallListItem
+from app.modules.shops.schemas import ShopBrief
+from app.modules.users import favorites, service
 from app.modules.users.schemas import (
     AuthOut,
     OtpRequest,
@@ -51,3 +53,33 @@ async def get_me(user: CurrentUser) -> UserOut:
 @me_router.patch("")
 async def patch_me(body: UserUpdate, user: CurrentUser, session: SessionDep) -> UserOut:
     return UserOut.model_validate(await service.update_me(session, user, body))
+
+
+@me_router.get("/favorites")
+async def list_favorites(user: CurrentUser, session: SessionDep) -> list[ShopBrief]:
+    return await favorites.list_favorites(session, user)
+
+
+@me_router.put("/favorites/{shop_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def add_favorite(shop_id: int, user: CurrentUser, session: SessionDep) -> None:
+    await favorites.add_favorite(session, user, shop_id)
+
+
+@me_router.delete("/favorites/{shop_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_favorite(shop_id: int, user: CurrentUser, session: SessionDep) -> None:
+    await favorites.remove_favorite(session, user, shop_id)
+
+
+@me_router.get("/malls")
+async def list_my_malls(user: CurrentUser, session: SessionDep) -> list[MallListItem]:
+    return await favorites.list_malls(session, user)
+
+
+@me_router.put("/malls/{mall_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def add_my_mall(mall_id: int, user: CurrentUser, session: SessionDep) -> None:
+    await favorites.add_mall(session, user, mall_id)
+
+
+@me_router.delete("/malls/{mall_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_my_mall(mall_id: int, user: CurrentUser, session: SessionDep) -> None:
+    await favorites.remove_mall(session, user, mall_id)
