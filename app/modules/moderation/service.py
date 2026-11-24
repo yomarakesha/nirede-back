@@ -35,15 +35,25 @@ async def _owned_shop_id(
     return promo.shop_id if promo else None
 
 
-async def check_seller_can_edit(session: AsyncSession, author: User, shop_id: int) -> Shop:
+async def _edit_denied(session: AsyncSession, author_id: int, shop_id: int) -> str | None:
+    """Why the author may not edit the shop right now, or None when they may."""
     shop = await session.get(Shop, shop_id)
     if shop is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "shop_not_found")
-    if shop.owner_id != author.id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "not_owner")
-    if not await has_active_subscription(session, shop.id):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "subscription_required")
-    return shop
+        return "shop_not_found"
+    if shop.owner_id != author_id:
+        return "not_owner"
+    if not await has_active_subscription(session, shop_id):
+        return "subscription_required"
+    return None
+
+
+async def check_seller_can_edit(session: AsyncSession, author: User, shop_id: int) -> Shop:
+    denied = await _edit_denied(session, author.id, shop_id)
+    if denied == "shop_not_found":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, denied)
+    if denied is not None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, denied)
+    return await session.get(Shop, shop_id)
 
 
 async def submit_change_request(
@@ -88,17 +98,7 @@ async def submit_change_request(
 async def get_change_request_or_404(
     session: AsyncSession, cr_id: int, *, lock: bool = False
 ) -> ChangeRequest:
-    if not lock:
-        return await get_or_404(session, ChangeRequest, cr_id, "change_request_not_found")
-    cr = await session.scalar(
-        select(ChangeRequest)
-        .where(ChangeRequest.id == cr_id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    )
-    if cr is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "change_request_not_found")
-    return cr
+    return await get_or_404(session, ChangeRequest, cr_id, "change_request_not_found", lock=lock)
 
 
 def _close(cr: ChangeRequest, admin: User, new_status: ModerationStatus, comment: str | None):
@@ -130,19 +130,18 @@ async def approve_change_request(
     """Apply the change. If it can no longer be applied, reject it with the reason instead."""
     _ensure_pending(cr)
     shop_id = await _owned_shop_id(session, cr.entity_type, cr.entity_id)
-    reason: str | None = None
     if shop_id is None:
         reason = "entity_deleted"
-    elif (await session.get(Shop, shop_id)).owner_id != cr.author_id:
-        reason = "not_owner"
-    elif not await has_active_subscription(session, shop_id):
-        reason = "subscription_expired"
     else:
+        reason = await _edit_denied(session, cr.author_id, shop_id)
+        if reason == "subscription_required":
+            reason = "subscription_expired"  # it was active when the request was submitted
+    if reason is None:
         try:
             data = PAYLOAD_SCHEMAS[cr.entity_type].model_validate(cr.payload)
             async with session.begin_nested():
                 await _apply(session, cr, data)
-        except (ValidationError, IntegrityError, TypeError, ValueError):
+        except (ValidationError, IntegrityError):
             reason = "invalid_payload"
         except HTTPException as exc:
             reason = str(exc.detail)

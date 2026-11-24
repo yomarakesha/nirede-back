@@ -4,11 +4,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.common import PhotoOut
+from app.crud import apply_update
 from app.modules.categories.schemas import CategoryBrief
 from app.modules.categories.service import ancestors_map
 from app.modules.cities.models import City
+from app.modules.cities.service import get_city_or_404
 from app.modules.malls.models import Mall, MallFloor, MallLayout, MallPhoto
-from app.modules.malls.schemas import MallDetail, MallFloorIn, MallFloorOut, MallListItem
+from app.modules.malls.schemas import (
+    MallDetail,
+    MallFloorIn,
+    MallFloorOut,
+    MallListItem,
+    MallUpdate,
+)
 from app.timeutil import is_open, utcnow
 
 
@@ -39,14 +47,16 @@ async def check_shops_fit_layout(session: AsyncSession, mall: Mall) -> None:
     """Refuse a layout/floors change that would leave existing shops with an invalid location."""
     from app.modules.shops.models import Shop
 
+    # Same rules as shops.service._validate_location.
     if mall.layout == MallLayout.floors:
         broken = (
-            (Shop.floor.is_(None))
+            Shop.floor.is_(None)
+            | (Shop.floor < 1)
             | (Shop.floor > (mall.floors_count or 0))
-            | (Shop.row.is_not(None))
+            | Shop.row.is_not(None)
         )
     else:
-        broken = Shop.row.is_(None) | Shop.floor.is_not(None)
+        broken = Shop.row.is_(None) | (Shop.row == "") | Shop.floor.is_not(None)
     found = await session.scalar(select(Shop.id).where(Shop.mall_id == mall.id, broken).limit(1))
     if found is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "mall_has_shops_outside_layout")
@@ -57,6 +67,17 @@ async def sync_shop_city(session: AsyncSession, mall: Mall) -> None:
     from app.modules.shops.models import Shop
 
     await session.execute(update(Shop).where(Shop.mall_id == mall.id).values(city_id=mall.city_id))
+
+
+async def update_mall(session: AsyncSession, mall: Mall, data: MallUpdate) -> Mall:
+    if data.city_id is not None:
+        await get_city_or_404(session, data.city_id)
+    apply_update(mall, data)
+    check_layout(mall)
+    await check_shops_fit_layout(session, mall)
+    await sync_shop_city(session, mall)
+    await session.commit()
+    return mall
 
 
 async def replace_photos(session: AsyncSession, mall: Mall, paths: list[str]) -> None:

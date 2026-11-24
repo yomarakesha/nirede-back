@@ -2,7 +2,7 @@ from fastapi import APIRouter, status
 from sqlalchemy import select
 
 from app.common import PhotosIn
-from app.crud import apply_update, delete_or_409, paginate
+from app.crud import delete_or_409, paginate
 from app.deps import AdminUser, SessionDep
 from app.modules.cities.service import get_city_or_404
 from app.modules.malls import service
@@ -43,13 +43,7 @@ async def update_mall(
     mall_id: int, body: MallUpdate, _: AdminUser, session: SessionDep
 ) -> MallAdminOut:
     mall = await service.get_mall_or_404(session, mall_id)
-    if body.city_id is not None:
-        await get_city_or_404(session, body.city_id)
-    apply_update(mall, body)
-    service.check_layout(mall)
-    await service.check_shops_fit_layout(session, mall)
-    await service.sync_shop_city(session, mall)
-    await session.commit()
+    await service.update_mall(session, mall, body)
     return MallAdminOut.model_validate(mall)
 
 

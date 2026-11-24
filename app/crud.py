@@ -11,8 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.pagination import PageParams
 
 
-async def get_or_404[M](session: AsyncSession, model: type[M], obj_id: int, detail: str) -> M:
-    obj = await session.get(model, obj_id)
+async def get_or_404[M](
+    session: AsyncSession, model: type[M], obj_id: int, detail: str, *, lock: bool = False
+) -> M:
+    """With `lock`, the row is reloaded under FOR UPDATE: reviews of one row run one at a time."""
+    obj = await session.get(model, obj_id, with_for_update=lock, populate_existing=lock)
     if obj is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail)
     return obj

@@ -30,7 +30,7 @@ async def list_applications(
 async def approve(
     app_id: int, body: ApproveIn, admin: AdminUser, session: SessionDep
 ) -> ApplicationOut:
-    application = await service.get_application_or_404(session, app_id)
+    application = await service.get_application_or_404(session, app_id, lock=True)
     await service.approve_application(
         session, application, admin, shop_data=body.shop, subscription=body.subscription
     )
@@ -41,7 +41,7 @@ async def approve(
 async def reject(
     app_id: int, body: ReviewIn, admin: AdminUser, session: SessionDep
 ) -> ApplicationOut:
-    application = await service.get_application_or_404(session, app_id)
+    application = await service.get_application_or_404(session, app_id, lock=True)
     await service.reject_application(session, application, admin, body.comment)
     return ApplicationOut.model_validate(application)
 

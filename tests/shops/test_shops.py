@@ -196,3 +196,18 @@ async def test_admin_delete_shop(client, session):
     h, city, *_ = await _setup(session)
     shop = await make_shop(session, "X", city=city)
     assert (await client.delete(f"/api/v1/admin/shops/{shop.id}", headers=h)).status_code == 204
+
+
+async def test_admin_patch_shop_null_name_422(client, seller_world):
+    w = seller_world
+    r = await client.patch(f"/api/v1/admin/shops/{w.shop.id}", json={"name": None}, headers=w.ah)
+    assert r.status_code == 422
+
+
+async def test_nullable_fields_can_be_cleared(client, seller_world):
+    w = seller_world
+    r = await client.patch(
+        f"/api/v1/admin/shops/{w.shop.id}", json={"how_to_find_ru": None}, headers=w.ah
+    )
+    assert r.status_code == 200
+    assert r.json()["how_to_find_ru"] is None

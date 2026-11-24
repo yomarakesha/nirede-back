@@ -1,3 +1,6 @@
+from sqlalchemy import select
+
+from app.modules.shops.models import Shop
 from tests.factories import auth_headers, make_admin, make_city, make_mall, make_shop, make_user
 
 
@@ -164,3 +167,31 @@ async def test_admin_cannot_demote_self(client, session):
     )
     assert r.status_code == 409
     assert r.json()["detail"] == "cannot_demote_self"
+
+
+async def test_application_approve_twice_one_shop(client, session):
+    h = auth_headers(await make_admin(session))
+    user = await make_user(session)
+    mall = await make_mall(session, await make_city(session))
+    r = await client.post(
+        "/api/v1/me/seller-applications",
+        json={
+            "shop_name": "S",
+            "mall_id": mall.id,
+            "floor": 1,
+            "number": "1",
+            "contact_phone": "865123456",
+        },
+        headers=auth_headers(user),
+    )
+    app_id = r.json()["id"]
+    body = {"shop": {"name": "S", "mall_id": mall.id, "floor": 1, "number": "1"}}
+    first = await client.post(
+        f"/api/v1/admin/seller-applications/{app_id}/approve", json=body, headers=h
+    )
+    second = await client.post(
+        f"/api/v1/admin/seller-applications/{app_id}/approve", json=body, headers=h
+    )
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert len(list(await session.scalars(select(Shop)))) == 1

@@ -39,6 +39,10 @@ async def request_otp(session: AsyncSession, phone: str, sms: SmsSender) -> None
         or await _otp_count_since(session, phone, now - timedelta(days=1)) >= OTP_PER_DAY
     ):
         raise HTTPException(status.HTTP_409_CONFLICT, "otp_rate_limited")
+    # Rows live for the longest rate-limit window, then go.
+    await session.execute(
+        delete(OtpCode).where(OtpCode.phone == phone, OtpCode.created_at <= now - timedelta(days=1))
+    )
     code = generate_otp()
     session.add(
         OtpCode(
@@ -74,7 +78,8 @@ async def verify_otp(session: AsyncSession, phone: str, code: str) -> User:
         await session.commit()
         raise _unauthorized("otp_invalid")
 
-    await session.execute(delete(OtpCode).where(OtpCode.phone == phone))
+    # Expire instead of delete: the rows still count towards the request rate limits.
+    await session.execute(update(OtpCode).where(OtpCode.phone == phone).values(expires_at=utcnow()))
     user = await session.scalar(select(User).where(User.phone == phone))
     if user is None:
         user = User(phone=phone)

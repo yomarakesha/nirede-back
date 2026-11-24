@@ -120,3 +120,10 @@ async def test_delete_with_children_conflict(client, session):
     assert r.json()["detail"] == "category_in_use"
     r = await client.delete(f"/api/v1/admin/categories/{coat.id}", headers=h)
     assert r.status_code == 204
+
+
+async def test_admin_patch_category_null_422(client, session):
+    h = auth_headers(await make_admin(session))
+    cat = await make_category(session, "X")
+    r = await client.patch(f"/api/v1/admin/categories/{cat.id}", json={"name_ru": None}, headers=h)
+    assert r.status_code == 422

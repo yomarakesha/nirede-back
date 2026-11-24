@@ -106,3 +106,38 @@ async def test_attempts_counted_in_db(client, session, sms):
 
     attempts = await session.scalar(select(OtpCode.attempts))
     assert attempts == 2
+
+
+async def test_daily_otp_cap(client, session, sms):
+    for _ in range(10):
+        r = await client.post("/api/v1/auth/otp/request", json={"phone": "+99365123456"})
+        assert r.status_code == 204
+        await session.execute(
+            update(OtpCode).values(created_at=OtpCode.created_at - timedelta(hours=2))
+        )
+    r = await client.post("/api/v1/auth/otp/request", json={"phone": "+99365123456"})
+    assert r.status_code == 409
+    assert r.json()["detail"] == "otp_rate_limited"
+
+
+async def test_login_does_not_reset_daily_otp_cap(client, session, sms):
+    phone = "+99365123456"
+    for _ in range(10):
+        r = await client.post("/api/v1/auth/otp/request", json={"phone": phone})
+        assert r.status_code == 204
+        r = await client.post("/api/v1/auth/otp/verify", json={"phone": phone, "code": "1234"})
+        assert r.status_code == 200
+        await session.execute(
+            update(OtpCode).values(created_at=OtpCode.created_at - timedelta(hours=2))
+        )
+    r = await client.post("/api/v1/auth/otp/request", json={"phone": phone})
+    assert r.status_code == 409
+
+
+async def test_used_code_cannot_log_in_again(client, sms):
+    phone = "+99365123456"
+    await client.post("/api/v1/auth/otp/request", json={"phone": phone})
+    r = await client.post("/api/v1/auth/otp/verify", json={"phone": phone, "code": "1234"})
+    assert r.status_code == 200
+    r = await client.post("/api/v1/auth/otp/verify", json={"phone": phone, "code": "1234"})
+    assert r.status_code == 401

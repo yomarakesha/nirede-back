@@ -4,11 +4,12 @@ from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy import delete, func, select, union, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.modules.malls.models import Mall
 from app.modules.notifications.models import DeviceToken, Notification
 from app.modules.notifications.push import PushMessage, PushSender, send_all
-from app.modules.promotions.models import Promotion
+from app.modules.promotions.models import Promotion, active_clause
 from app.modules.promotions.service import is_active
 from app.modules.shops.models import Shop
 from app.modules.shops.service import public_shops
@@ -32,18 +33,41 @@ async def _recipient_ids(session: AsyncSession, shop: Shop) -> list[int]:
     return list(await session.scalars(union(*queries)))
 
 
+async def _claim_announcement(session: AsyncSession, promotion: Promotion) -> bool:
+    """Set `announced_at` unless someone already did. True when this call set it.
+
+    The conditional UPDATE takes the row lock, so of two concurrent callers (approve and
+    announce-due, or overlapping announce-due runs) only one wins; the other sees 0 rows
+    once the winner commits.
+    """
+    announced_at = await session.scalar(
+        update(Promotion)
+        .where(Promotion.id == promotion.id, Promotion.announced_at.is_(None))
+        .values(announced_at=utcnow())
+        .returning(Promotion.announced_at)
+        .execution_options(synchronize_session=False)
+    )
+    if announced_at is None:
+        return False
+    set_committed_value(promotion, "announced_at", announced_at)
+    return True
+
+
 async def notify_promotion_published(
     session: AsyncSession, promotion: Promotion
-) -> list[Notification]:
+) -> list[Notification] | None:
     """Write feed entries for a promotion that is public now, once.
 
-    Promotions that start later are picked up by `python -m app.cli announce-due`.
+    Returns None when this call did not announce it: not active yet, shop hidden, or already
+    announced. Promotions that start later are picked up by `announce_due`.
     """
     if not is_active(promotion) or promotion.announced_at is not None:
-        return []
+        return None
     shop = await session.scalar(public_shops().where(Shop.id == promotion.shop_id))
     if shop is None:
-        return []
+        return None
+    if not await _claim_announcement(session, promotion):
+        return None
     mall = await session.get(Mall, shop.mall_id) if shop.mall_id else None
     title_ru = mall.name_ru if mall else shop.name
     title_tk = mall.name_tk if mall else shop.name
@@ -60,7 +84,6 @@ async def notify_promotion_published(
         for user_id in await _recipient_ids(session, shop)
     ]
     session.add_all(notifications)
-    promotion.announced_at = utcnow()
     await session.commit()
     return notifications
 
@@ -95,9 +118,31 @@ async def announce_promotion(
     session: AsyncSession, promotion: Promotion, background: BackgroundTasks, push: PushSender
 ) -> None:
     notifications = await notify_promotion_published(session, promotion)
-    messages = await push_messages(session, notifications)
+    messages = await push_messages(session, notifications or [])
     if messages:
         background.add_task(send_all, messages, push)
+
+
+async def announce_due(session: AsyncSession, push: PushSender) -> int:
+    """Announce approved promotions that have started but were not announced yet.
+
+    Run periodically (`python -m app.cli announce-due`). A promotion of a hidden shop stays
+    unannounced and is retried on the next run, so followers still hear about it if the shop
+    becomes visible again before the promotion ends. Returns how many were announced.
+    """
+    due = list(
+        await session.scalars(
+            select(Promotion).where(active_clause(utcnow()), Promotion.announced_at.is_(None))
+        )
+    )
+    announced = 0
+    for promo in due:
+        notifications = await notify_promotion_published(session, promo)
+        if notifications is None:
+            continue
+        announced += 1
+        await send_all(await push_messages(session, notifications), push)
+    return announced
 
 
 async def mark_read(session: AsyncSession, user: User, notification_id: int) -> None:

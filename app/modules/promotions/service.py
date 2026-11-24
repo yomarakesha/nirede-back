@@ -20,17 +20,7 @@ from app.timeutil import utcnow
 async def get_promotion_or_404(
     session: AsyncSession, promo_id: int, *, lock: bool = False
 ) -> Promotion:
-    if not lock:
-        return await get_or_404(session, Promotion, promo_id, "promotion_not_found")
-    promo = await session.scalar(
-        select(Promotion)
-        .where(Promotion.id == promo_id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    )
-    if promo is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "promotion_not_found")
-    return promo
+    return await get_or_404(session, Promotion, promo_id, "promotion_not_found", lock=lock)
 
 
 def is_active(promo: Promotion) -> bool:

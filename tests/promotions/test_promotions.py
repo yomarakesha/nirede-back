@@ -150,3 +150,12 @@ async def test_admin_update_and_delete(client, session):
     assert (
         await client.delete(f"/api/v1/admin/promotions/{promo.id}", headers=h)
     ).status_code == 204
+
+
+async def test_admin_patch_promotion_null_start_422(client, session, seller_world):
+    w = seller_world
+    promo = await make_promotion(session, w.shop)
+    r = await client.patch(
+        f"/api/v1/admin/promotions/{promo.id}", json={"starts_at": None}, headers=w.ah
+    )
+    assert r.status_code == 422

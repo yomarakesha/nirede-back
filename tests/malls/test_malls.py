@@ -1,4 +1,4 @@
-from tests.factories import auth_headers, make_admin, make_city, make_mall
+from tests.factories import auth_headers, make_admin, make_city, make_mall, make_shop
 
 
 def _mall_body(city_id, **kw):
@@ -130,3 +130,54 @@ async def test_mall_in_inactive_city_hidden(client, session):
     await session.flush()
     assert (await client.get("/api/v1/malls")).json() == []
     assert (await client.get(f"/api/v1/malls/{mall.id}")).status_code == 404
+
+
+async def test_admin_photos_on_inactive_mall(client, session):
+    h = auth_headers(await make_admin(session))
+    mall = await make_mall(session, await make_city(session), is_active=False)
+    r = await client.put(
+        f"/api/v1/admin/malls/{mall.id}/photos", json={"paths": ["a.webp"]}, headers=h
+    )
+    assert r.status_code == 200
+    r = await client.put(
+        f"/api/v1/admin/malls/{mall.id}/floors",
+        json=[{"number": 1, "summary_ru": "a", "summary_tk": "a"}],
+        headers=h,
+    )
+    assert r.status_code == 200
+
+
+async def test_mall_city_change_moves_shops(client, session):
+    h = auth_headers(await make_admin(session))
+    a = await make_city(session)
+    b = await make_city(session, "Мары", "Mary")
+    mall = await make_mall(session, a)
+    shop = await make_shop(session, "X", mall=mall, floor=1)
+    r = await client.patch(f"/api/v1/admin/malls/{mall.id}", json={"city_id": b.id}, headers=h)
+    assert r.status_code == 200
+    await session.refresh(shop)
+    assert shop.city_id == b.id
+
+
+async def test_mall_floors_cannot_shrink_below_shops(client, session):
+    h = auth_headers(await make_admin(session))
+    mall = await make_mall(session, await make_city(session), floors_count=4)
+    await make_shop(session, "X", mall=mall, floor=4)
+    r = await client.patch(f"/api/v1/admin/malls/{mall.id}", json={"floors_count": 3}, headers=h)
+    assert r.status_code == 409
+    assert r.json()["detail"] == "mall_has_shops_outside_layout"
+    r = await client.patch(f"/api/v1/admin/malls/{mall.id}", json={"layout": "rows"}, headers=h)
+    assert r.status_code == 409
+
+
+async def test_layout_check_matches_shop_validation(client, session):
+    h = auth_headers(await make_admin(session))
+    city = await make_city(session)
+    floors = await make_mall(session, city, floors_count=4)
+    await make_shop(session, "X", mall=floors, floor=0)
+    r = await client.patch(f"/api/v1/admin/malls/{floors.id}", json={"sort_order": 1}, headers=h)
+    assert r.status_code == 409
+    rows = await make_mall(session, city, "Rows", layout="rows")
+    await make_shop(session, "Y", mall=rows, row="")
+    r = await client.patch(f"/api/v1/admin/malls/{rows.id}", json={"sort_order": 1}, headers=h)
+    assert r.status_code == 409

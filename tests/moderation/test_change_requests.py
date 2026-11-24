@@ -2,7 +2,7 @@ from datetime import timedelta
 
 from sqlalchemy import update
 
-from app.modules.shops.models import Subscription
+from app.modules.shops.models import Shop, Subscription
 from app.timeutil import utcnow
 from tests.factories import auth_headers, make_shop, make_user
 
@@ -176,3 +176,27 @@ async def test_double_review_409(client, seller_world):
     r = await client.post(f"/api/v1/admin/change-requests/{cr['id']}/approve", headers=w.ah)
     assert r.status_code == 409
     assert r.json()["detail"] == "already_reviewed"
+
+
+async def test_change_request_null_name_422(client, seller_world):
+    w = seller_world
+    r = await client.post(
+        f"/api/v1/seller/shops/{w.shop.id}/change-requests", json={"name": None}, headers=w.sh
+    )
+    assert r.status_code == 422
+
+
+async def test_approve_after_ownership_change_autorejects(client, session, seller_world):
+    w = seller_world
+    cr = (
+        await client.post(
+            f"/api/v1/seller/shops/{w.shop.id}/change-requests",
+            json={"how_to_find_ru": "чужое"},
+            headers=w.sh,
+        )
+    ).json()
+    other = await make_user(session, phone="+99365000055", role="seller")
+    await session.execute(update(Shop).where(Shop.id == w.shop.id).values(owner_id=other.id))
+    r = await client.post(f"/api/v1/admin/change-requests/{cr['id']}/approve", headers=w.ah)
+    assert r.json()["status"] == "rejected"
+    assert r.json()["admin_comment"] == "not_owner"

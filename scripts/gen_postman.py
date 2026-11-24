@@ -8,7 +8,6 @@ postman/environments/local.postman_environment.json.
 import json
 import re
 import sys
-import uuid
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +18,9 @@ from app.main import create_app  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 COLLECTION = ROOT / "postman/collections/nirede.postman_collection.json"
 ENVIRONMENT = ROOT / "postman/environments/local.postman_environment.json"
+# Fixed ids: Postman matches re-imports by id, and regenerating must not churn the diff.
+COLLECTION_ID = "f11343dc-cd26-4ea5-8a08-1719ae86e749"
+ENVIRONMENT_ID = "48461070-3a11-4519-8ed2-0242522d74fd"
 
 # Folder order and the bearer token each folder uses.
 FOLDERS = [
@@ -169,10 +171,6 @@ SAVE_ID = """if (pm.response.code === 201) {{
 }}"""
 
 STATUS_OK = 'pm.test("status 2xx", () => pm.expect(pm.response.code).to.be.within(200, 299));'
-
-
-def _uid() -> str:
-    return str(uuid.uuid4())
 
 
 def _resolve(schema: dict, components: dict) -> dict:
@@ -339,7 +337,7 @@ def build() -> tuple[dict, dict]:
     }
     collection = {
         "info": {
-            "_postman_id": _uid(),
+            "_postman_id": COLLECTION_ID,
             "name": "Nirede API",
             "description": DESCRIPTION,
             "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
@@ -363,7 +361,7 @@ def build() -> tuple[dict, dict]:
         ],
     }
     environment = {
-        "id": _uid(),
+        "id": ENVIRONMENT_ID,
         "name": "Nirede local",
         "values": [
             {"key": "baseUrl", "value": "http://localhost:8000", "enabled": True},

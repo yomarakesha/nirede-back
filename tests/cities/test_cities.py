@@ -1,4 +1,4 @@
-from tests.factories import auth_headers, make_admin, make_user
+from tests.factories import auth_headers, make_admin, make_city, make_user
 
 CITY = {"name_ru": "Ашхабад", "name_tk": "Aşgabat"}
 
@@ -53,4 +53,11 @@ async def test_non_admin_forbidden(client, session):
 async def test_validation_empty_name(client, session):
     h = auth_headers(await make_admin(session))
     r = await client.post("/api/v1/admin/cities", json={"name_ru": "", "name_tk": "x"}, headers=h)
+    assert r.status_code == 422
+
+
+async def test_admin_patch_city_null_422(client, session):
+    h = auth_headers(await make_admin(session))
+    city = await make_city(session)
+    r = await client.patch(f"/api/v1/admin/cities/{city.id}", json={"name_ru": None}, headers=h)
     assert r.status_code == 422
