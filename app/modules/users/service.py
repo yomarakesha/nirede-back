@@ -31,7 +31,22 @@ async def _otp_count_since(session: AsyncSession, phone: str, since) -> int:
     return await session.scalar(stmt) or 0
 
 
+def _is_test_login(phone: str) -> bool:
+    return phone == get_settings().test_login_phone
+
+
+async def _get_or_create_user(session: AsyncSession, phone: str) -> User:
+    user = await session.scalar(select(User).where(User.phone == phone))
+    if user is None:
+        user = User(phone=phone)
+        session.add(user)
+    await session.commit()
+    return user
+
+
 async def request_otp(session: AsyncSession, phone: str, sms: SmsSender) -> None:
+    if _is_test_login(phone):
+        return
     now = utcnow()
     if (
         await _otp_count_since(session, phone, now - timedelta(minutes=1)) >= OTP_PER_MINUTE
@@ -57,6 +72,10 @@ async def request_otp(session: AsyncSession, phone: str, sms: SmsSender) -> None
 
 
 async def verify_otp(session: AsyncSession, phone: str, code: str) -> User:
+    if _is_test_login(phone):
+        if code != get_settings().test_login_code:
+            raise _unauthorized("otp_invalid")
+        return await _get_or_create_user(session, phone)
     otp = await session.scalar(
         select(OtpCode).where(OtpCode.phone == phone).order_by(OtpCode.id.desc()).limit(1)
     )
@@ -80,12 +99,7 @@ async def verify_otp(session: AsyncSession, phone: str, code: str) -> User:
 
     # Expire instead of delete: the rows still count towards the request rate limits.
     await session.execute(update(OtpCode).where(OtpCode.phone == phone).values(expires_at=utcnow()))
-    user = await session.scalar(select(User).where(User.phone == phone))
-    if user is None:
-        user = User(phone=phone)
-        session.add(user)
-    await session.commit()
-    return user
+    return await _get_or_create_user(session, phone)
 
 
 async def issue_tokens(session: AsyncSession, user: User) -> TokenPair:

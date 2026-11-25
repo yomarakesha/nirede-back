@@ -6245,7 +6245,7 @@
           },
           "code": {
             "type": "string",
-            "pattern": "^\\d{4}$",
+            "pattern": "^\\d{4,6}$",
             "title": "Code"
           }
         },

@@ -15,7 +15,7 @@ class OtpRequest(BaseModel):
 
 class OtpVerify(BaseModel):
     phone: Phone
-    code: str = Field(pattern=r"^\d{4}$")
+    code: str = Field(pattern=r"^\d{4,6}$")
 
 
 class RefreshIn(BaseModel):

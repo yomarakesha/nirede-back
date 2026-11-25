@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
@@ -63,6 +64,14 @@ def create_app() -> FastAPI:
         app.include_router(router, prefix=API_PREFIX)
 
     settings = get_settings()
+    if settings.cors_origins:
+        # Bearer tokens, no cookies, so credentials stay off and "*" is allowed.
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.cors_origins,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
     settings.media_dir.mkdir(parents=True, exist_ok=True)
     app.mount(settings.media_url, StaticFiles(directory=settings.media_dir), name="media")
     return app

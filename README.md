@@ -24,6 +24,8 @@ uv run uvicorn app.main:app --reload
   `uv run python -c "import json; from app.main import create_app; print(json.dumps(create_app().openapi(), ensure_ascii=False, indent=2))" > docs/api/openapi.json`.
 - Фото отдаются из `/media` (папка `media/`).
 - SMS и push пока заглушки: при `SMS_DEBUG_LOG=true` код входа виден в логе сервера.
+- Тестовый вход на время разработки: `TEST_LOGIN_PHONE` + `TEST_LOGIN_CODE` в `.env` — этот номер входит
+  с фиксированным кодом, без SMS и лимитов. На проде с реальными пользователями уберите.
 
 Всё в Docker: `docker compose up --build` (API на :8000, миграции применяются при старте).
 

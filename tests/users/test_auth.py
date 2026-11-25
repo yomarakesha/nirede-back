@@ -1,7 +1,10 @@
 from datetime import timedelta
 
+import pytest
 from sqlalchemy import update
 
+from app.config import Settings
+from app.modules.users import service as users_service
 from app.modules.users.models import OtpCode
 from app.timeutil import utcnow
 
@@ -140,4 +143,29 @@ async def test_used_code_cannot_log_in_again(client, sms):
     r = await client.post("/api/v1/auth/otp/verify", json={"phone": phone, "code": "1234"})
     assert r.status_code == 200
     r = await client.post("/api/v1/auth/otp/verify", json={"phone": phone, "code": "1234"})
+    assert r.status_code == 401
+
+
+@pytest.fixture
+def test_login(monkeypatch):
+    settings = Settings(test_login_phone="99361111111", test_login_code="11111")
+    monkeypatch.setattr(users_service, "get_settings", lambda: settings)
+
+
+async def test_test_phone_logs_in_with_fixed_code(client, sms, test_login):
+    for _ in range(2):  # no rate limit, no SMS, same user each time
+        r = await _login(client, phone="+99361111111", code="11111")
+        assert r.status_code == 200, r.text
+        assert r.json()["user"]["phone"] == "+99361111111"
+    assert sms.sent == []
+
+
+async def test_test_phone_rejects_wrong_code(client, sms, test_login):
+    r = await _login(client, phone="+99361111111", code="1234")
+    assert r.status_code == 401
+    assert r.json()["detail"] == "otp_invalid"
+
+
+async def test_other_phones_unaffected_by_test_login(client, sms, test_login):
+    r = await _login(client, code="11111")
     assert r.status_code == 401
