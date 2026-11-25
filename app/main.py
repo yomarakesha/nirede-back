@@ -41,13 +41,15 @@ def create_app() -> FastAPI:
 
     @app.get("/docs", include_in_schema=False)
     async def swagger_ui() -> HTMLResponse:
+        # Relative URLs so the page also works behind a proxy that mounts the API
+        # under a path prefix (e.g. nginx at /nirede/) without setting root_path.
         return get_swagger_ui_html(
-            openapi_url=app.openapi_url,
+            openapi_url=app.openapi_url.lstrip("/"),
             title=f"{app.title} - Swagger UI",
-            oauth2_redirect_url=app.swagger_ui_oauth2_redirect_url,
-            swagger_js_url="/static/swagger/swagger-ui-bundle.js",
-            swagger_css_url="/static/swagger/swagger-ui.css",
-            swagger_favicon_url="/static/swagger/favicon-32x32.png",
+            oauth2_redirect_url=app.swagger_ui_oauth2_redirect_url.lstrip("/"),
+            swagger_js_url="static/swagger/swagger-ui-bundle.js",
+            swagger_css_url="static/swagger/swagger-ui.css",
+            swagger_favicon_url="static/swagger/favicon-32x32.png",
         )
 
     @app.get(app.swagger_ui_oauth2_redirect_url, include_in_schema=False)
