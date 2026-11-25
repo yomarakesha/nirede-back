@@ -1,7 +1,10 @@
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html, get_swagger_ui_oauth2_redirect_html
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
@@ -26,11 +29,30 @@ from app.modules.users import admin_router as users_admin
 from app.modules.users.router import auth_router, me_router
 
 API_PREFIX = "/api/v1"
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 def create_app() -> FastAPI:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    app = FastAPI(title="Nirede API", version="0.1.0")
+    # docs_url=None: the default /docs page pulls Swagger UI from a CDN that is not
+    # always reachable, so we serve vendored copies from app/static/swagger instead.
+    app = FastAPI(title="Nirede API", version="0.1.0", docs_url=None)
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+    @app.get("/docs", include_in_schema=False)
+    async def swagger_ui() -> HTMLResponse:
+        return get_swagger_ui_html(
+            openapi_url=app.openapi_url,
+            title=f"{app.title} - Swagger UI",
+            oauth2_redirect_url=app.swagger_ui_oauth2_redirect_url,
+            swagger_js_url="/static/swagger/swagger-ui-bundle.js",
+            swagger_css_url="/static/swagger/swagger-ui.css",
+            swagger_favicon_url="/static/swagger/favicon-32x32.png",
+        )
+
+    @app.get(app.swagger_ui_oauth2_redirect_url, include_in_schema=False)
+    async def swagger_ui_redirect() -> HTMLResponse:
+        return get_swagger_ui_oauth2_redirect_html()
 
     @app.get("/health")
     async def health() -> dict[str, str]:
