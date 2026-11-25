@@ -28,11 +28,7 @@ async def mall_shops(
     category_id: int | None = None,
 ) -> MallShopsOut:
     await get_mall_or_404(session, mall_id, public=True)
-    stmt = service.public_shops().where(Shop.mall_id == mall_id)
-    if floor is not None:
-        stmt = stmt.where(Shop.floor == floor)
-    if row is not None:
-        stmt = stmt.where(Shop.row == row)
+    stmt = service.public_shops().where(service.located(mall_id=mall_id, floor=floor, row=row))
     if category_id is not None:
         ids = await subtree_ids(session, category_id)
         stmt = stmt.where(
@@ -42,4 +38,5 @@ async def mall_shops(
         )
     total = await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     shops = list(await session.scalars(service.order_premium_first(stmt)))
-    return MallShopsOut(total=total, items=await service.load_briefs(session, shops))
+    briefs = await service.load_briefs(session, shops)
+    return MallShopsOut(total=total, items=[service.only_mall(b, mall_id) for b in briefs])

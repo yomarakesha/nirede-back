@@ -12,7 +12,7 @@ from app.modules.promotions.schemas import (
     PromotionUpdate,
 )
 from app.modules.shops.models import Shop, premium_clause
-from app.modules.shops.service import get_shop_or_404, load_briefs, public_shops
+from app.modules.shops.service import get_shop_or_404, load_briefs, located, public_shops
 from app.modules.users.models import User
 from app.timeutil import utcnow
 
@@ -90,10 +90,8 @@ async def to_out(session: AsyncSession, promos: list[Promotion]) -> list[Promoti
 
 def _public(city_id: int | None, mall_id: int | None) -> Select:
     visible = public_shops().with_only_columns(Shop.id)
-    if city_id is not None:
-        visible = visible.where(Shop.city_id == city_id)
-    if mall_id is not None:
-        visible = visible.where(Shop.mall_id == mall_id)
+    if city_id is not None or mall_id is not None:
+        visible = visible.where(located(city_id=city_id, mall_id=mall_id))
     return select(Promotion).where(active_clause(utcnow()), Promotion.shop_id.in_(visible))
 
 

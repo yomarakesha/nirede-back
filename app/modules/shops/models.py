@@ -41,13 +41,6 @@ shop_categories = Table(
 class Shop(TimestampMixin, Base):
     __tablename__ = "shops"
     __table_args__ = (
-        CheckConstraint(
-            "(mall_id IS NOT NULL AND number IS NOT NULL"
-            " AND address_ru IS NULL AND address_tk IS NULL)"
-            " OR (mall_id IS NULL AND address_ru IS NOT NULL"
-            " AND floor IS NULL AND row IS NULL AND number IS NULL)",
-            name="ck_shop_location",
-        ),
         Index("ix_shops_name_trgm", text("lower(name) gin_trgm_ops"), postgresql_using="gin"),
     )
 
@@ -60,6 +53,37 @@ class Shop(TimestampMixin, Base):
     how_to_find_tk: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    owner_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+
+    photos: Mapped[list["ShopPhoto"]] = relationship(
+        order_by="ShopPhoto.position", cascade="all, delete-orphan", lazy="raise"
+    )
+    categories: Mapped[list[Category]] = relationship(secondary=shop_categories, lazy="raise")
+    locations: Mapped[list["ShopLocation"]] = relationship(
+        order_by="ShopLocation.position", cascade="all, delete-orphan", lazy="raise"
+    )
+
+
+class ShopLocation(TimestampMixin, Base):
+    """One point of sale: a place in a mall or a standalone address in a city."""
+
+    __tablename__ = "shop_locations"
+    __table_args__ = (
+        CheckConstraint(
+            "(mall_id IS NOT NULL AND number IS NOT NULL"
+            " AND address_ru IS NULL AND address_tk IS NULL)"
+            " OR (mall_id IS NULL AND address_ru IS NOT NULL"
+            " AND floor IS NULL AND row IS NULL AND number IS NULL)",
+            name="ck_shop_location",
+        ),
+    )
+
+    shop_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("shops.id", ondelete="CASCADE"), index=True
+    )
+    position: Mapped[int] = mapped_column(Integer)
     city_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("cities.id", ondelete="RESTRICT"), index=True
     )
@@ -71,14 +95,6 @@ class Shop(TimestampMixin, Base):
     number: Mapped[str | None] = mapped_column(String(16))
     address_ru: Mapped[str | None] = mapped_column(String(255))
     address_tk: Mapped[str | None] = mapped_column(String(255))
-    owner_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), index=True
-    )
-
-    photos: Mapped[list["ShopPhoto"]] = relationship(
-        order_by="ShopPhoto.position", cascade="all, delete-orphan", lazy="raise"
-    )
-    categories: Mapped[list[Category]] = relationship(secondary=shop_categories, lazy="raise")
 
 
 class ShopPhoto(TimestampMixin, Base):

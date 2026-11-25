@@ -6,29 +6,44 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
 
+from app.modules.cities.models import City
 from app.modules.malls.models import Mall
 from app.modules.notifications.models import DeviceToken, Notification
 from app.modules.notifications.push import PushMessage, PushSender, send_all
 from app.modules.promotions.models import Promotion, active_clause
 from app.modules.promotions.service import is_active
-from app.modules.shops.models import Shop
+from app.modules.shops.models import Shop, ShopLocation
 from app.modules.shops.service import public_shops
 from app.modules.users.models import User, favorite_shops, user_malls
 from app.timeutil import utcnow
 
 
-async def _recipient_ids(session: AsyncSession, shop: Shop) -> list[int]:
+async def _shop_malls(session: AsyncSession, shop: Shop) -> list[Mall]:
+    """Active malls the shop has a visible location in."""
+    return list(
+        await session.scalars(
+            select(Mall)
+            .join(ShopLocation, ShopLocation.mall_id == Mall.id)
+            .join(City, City.id == ShopLocation.city_id)
+            .where(ShopLocation.shop_id == shop.id, Mall.is_active, City.is_active)
+            .distinct()
+            .order_by(Mall.id)
+        )
+    )
+
+
+async def _recipient_ids(session: AsyncSession, shop: Shop, malls: list[Mall]) -> list[int]:
     by_favorite = (
         select(favorite_shops.c.user_id)
         .join(User, User.id == favorite_shops.c.user_id)
         .where(favorite_shops.c.shop_id == shop.id, User.notify_favorite_shops)
     )
     queries = [by_favorite]
-    if shop.mall_id is not None:
+    if malls:
         queries.append(
             select(user_malls.c.user_id)
             .join(User, User.id == user_malls.c.user_id)
-            .where(user_malls.c.mall_id == shop.mall_id, User.notify_my_malls)
+            .where(user_malls.c.mall_id.in_([m.id for m in malls]), User.notify_my_malls)
         )
     return list(await session.scalars(union(*queries)))
 
@@ -68,7 +83,9 @@ async def notify_promotion_published(
         return None
     if not await _claim_announcement(session, promotion):
         return None
-    mall = await session.get(Mall, shop.mall_id) if shop.mall_id else None
+    malls = await _shop_malls(session, shop)
+    # The mall name tells where the shop is; a shop in several malls is titled by itself.
+    mall = malls[0] if len(malls) == 1 else None
     title_ru = mall.name_ru if mall else shop.name
     title_tk = mall.name_tk if mall else shop.name
     notifications = [
@@ -81,7 +98,7 @@ async def notify_promotion_published(
             body_tk=f"{shop.name}: {promotion.title_tk}",
             image=promotion.image or shop.logo,
         )
-        for user_id in await _recipient_ids(session, shop)
+        for user_id in await _recipient_ids(session, shop, malls)
     ]
     session.add_all(notifications)
     await session.commit()

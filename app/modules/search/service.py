@@ -8,11 +8,12 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import distinct, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.categories.models import Category
 from app.modules.categories.schemas import CategoryBrief
+from app.modules.cities.models import City
 from app.modules.malls.models import Mall
 from app.modules.malls.service import to_list_items
 from app.modules.search.schemas import (
@@ -22,8 +23,14 @@ from app.modules.search.schemas import (
     SearchOut,
     SuggestOut,
 )
-from app.modules.shops.models import Shop, shop_categories
-from app.modules.shops.service import load_briefs, order_premium_first, public_shops
+from app.modules.shops.models import Shop, ShopLocation, shop_categories
+from app.modules.shops.service import (
+    load_briefs,
+    located,
+    only_mall,
+    order_premium_first,
+    public_shops,
+)
 
 SUGGEST_LIMIT = 5
 SIMILARITY_THRESHOLD = 0.3
@@ -82,11 +89,9 @@ async def _active_nodes(session: AsyncSession) -> dict[int, _Node]:
 
 
 def _shop_filter(stmt, city_id: int | None, mall_id: int | None):
-    if city_id is not None:
-        stmt = stmt.where(Shop.city_id == city_id)
-    if mall_id is not None:
-        stmt = stmt.where(Shop.mall_id == mall_id)
-    return stmt
+    if city_id is None and mall_id is None:
+        return stmt
+    return stmt.where(located(city_id=city_id, mall_id=mall_id))
 
 
 def _in_categories(ids: list[int]):
@@ -153,13 +158,20 @@ async def _top_categories(
 
 
 async def _malls_for(session: AsyncSession, node: _Node, city_id: int | None) -> list[MallCount]:
+    count = func.count(distinct(Shop.id))
     stmt = (
-        _shop_filter(public_shops(), city_id, None)
-        .where(Shop.mall_id.is_not(None), _in_categories(node.subtree_ids()))
-        .with_only_columns(Mall.id, Mall.name_ru, Mall.name_tk, Mall.layout, func.count(Shop.id))
+        select(Mall.id, Mall.name_ru, Mall.name_tk, Mall.layout, count)
+        .select_from(ShopLocation)
+        .join(Shop, Shop.id == ShopLocation.shop_id)
+        .join(Mall, Mall.id == ShopLocation.mall_id)
+        .join(City, City.id == ShopLocation.city_id)
+        .where(Shop.is_active, Mall.is_active, City.is_active)
+        .where(_in_categories(node.subtree_ids()))
         .group_by(Mall.id)
-        .order_by(func.count(Shop.id).desc(), Mall.sort_order, Mall.id)
+        .order_by(count.desc(), Mall.sort_order, Mall.id)
     )
+    if city_id is not None:
+        stmt = stmt.where(ShopLocation.city_id == city_id)
     return [
         MallCount(mall_id=i, name_ru=ru, name_tk=tk, layout=layout, shop_count=count)
         for i, ru, tk, layout, count in await session.execute(stmt)
@@ -236,9 +248,17 @@ async def search(
         shops = list(await session.scalars(order_premium_first(stmt)))
 
     briefs = await load_briefs(session, shops)
+    # A shop is listed in every mall it has a matching location in, with those locations only.
     by_mall: dict[int | None, list] = defaultdict(list)
     for brief in briefs:
-        by_mall[brief.mall.id if brief.mall else None].append(brief)
+        places = [
+            loc.mall.id if loc.mall else None
+            for loc in brief.locations
+            if (city_id is None or loc.city_id == city_id)
+            and (mall_id is None or (loc.mall is not None and loc.mall.id == mall_id))
+        ]
+        for m in dict.fromkeys(places):
+            by_mall[m].append(only_mall(brief, m))
     mall_ids = [m for m in by_mall if m is not None]
     malls = list(await session.scalars(select(Mall).where(Mall.id.in_(mall_ids))))
     mall_items = {m.id: m for m in await to_list_items(session, malls)}

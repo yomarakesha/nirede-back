@@ -68,7 +68,12 @@ async def test_new_shop_flow_requires_shop_data(client, session):
     assert r.json()["detail"] == "shop_data_required"
     r = await client.post(
         f"/api/v1/admin/seller-applications/{app_id}/approve",
-        json={"shop": {"name": "Moda Line", "mall_id": mall.id, "floor": 2, "number": "214"}},
+        json={
+            "shop": {
+                "name": "Moda Line",
+                "locations": [{"mall_id": mall.id, "floor": 2, "number": "214"}],
+            }
+        },
         headers=ah,
     )
     assert r.status_code == 200, r.text
@@ -185,7 +190,7 @@ async def test_application_approve_twice_one_shop(client, session):
         headers=auth_headers(user),
     )
     app_id = r.json()["id"]
-    body = {"shop": {"name": "S", "mall_id": mall.id, "floor": 1, "number": "1"}}
+    body = {"shop": {"name": "S", "locations": [{"mall_id": mall.id, "floor": 1, "number": "1"}]}}
     first = await client.post(
         f"/api/v1/admin/seller-applications/{app_id}/approve", json=body, headers=h
     )

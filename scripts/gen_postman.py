@@ -107,9 +107,14 @@ EXAMPLES: dict[tuple[str, str], Any] = {
     },
     ("POST", "/api/v1/admin/shops"): {
         "name": "Moda Line",
-        "mall_id": "{{mall_id}}",
-        "floor": 2,
-        "number": "214",
+        "locations": [
+            {"mall_id": "{{mall_id}}", "floor": 2, "number": "214"},
+            {
+                "city_id": "{{city_id}}",
+                "address_ru": "ул. Гёроглы, 1",
+                "address_tk": "Görogly köçesi, 1",
+            },
+        ],
         "phone": "+99365123456",
         "opens_at": "10:00",
         "closes_at": "22:00",

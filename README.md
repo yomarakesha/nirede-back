@@ -1,7 +1,7 @@
 # Nirede — backend
 
 REST API справочника «где в Ашхабаде продаётся нужная категория товаров»: торговые центры,
-магазины (в ТЦ или отдельно в городе), дерево категорий, поиск, акции, избранное,
+магазины (у магазина одна или несколько точек: в ТЦ или отдельно в городе), дерево категорий, поиск, акции, избранное,
 уведомления, подписка продавцов и модерация их правок.
 
 Стек: Python 3.13, FastAPI, SQLAlchemy 2.0 (async, asyncpg), Alembic, PostgreSQL 16 + `pg_trgm`.
@@ -19,7 +19,9 @@ uv run python -m app.cli create-admin +99365123456
 uv run uvicorn app.main:app --reload
 ```
 
-- Swagger: http://localhost:8000/docs, OpenAPI: `/openapi.json`.
+- Swagger: http://localhost:8000/docs, OpenAPI: `/openapi.json`. Снимок схемы лежит в
+  `docs/api/openapi.json`; после изменения API пересоберите его:
+  `uv run python -c "import json; from app.main import create_app; print(json.dumps(create_app().openapi(), ensure_ascii=False, indent=2))" > docs/api/openapi.json`.
 - Фото отдаются из `/media` (папка `media/`).
 - SMS и push пока заглушки: при `SMS_DEBUG_LOG=true` код входа виден в логе сервера.
 
@@ -46,6 +48,8 @@ uv run ruff check . && uv run ruff format --check .
 - `app/modules/<домен>/` — `models.py`, `schemas.py`, `service.py`, `router.py`, `admin_router.py`.
 - Все тексты для пользователя хранятся парой полей `*_ru` / `*_tk`; API отдаёт обе, язык выбирает клиент.
 - Списки: `?limit=&offset=` → `{"items": [...], "total": N}`. Ошибки: `{"detail": "код_ошибки"}`.
+- Точки магазина: `locations` в `POST /admin/shops` (минимум одна) и `PATCH` (заменяет весь список).
+  Категории, фото, телефон, часы, подписка и акции общие для всех точек.
 - Префикс API: `/api/v1`. Зоны: публичная, `/me` (пользователь), `/seller`, `/admin`.
 
 ### Роли и поток продавца
@@ -71,6 +75,8 @@ uv run ruff check . && uv run ruff format --check .
   при пустом результате `similar_categories`.
 - Категория находит магазины всего своего поддерева. Чтобы фраза вроде «женское пальто» находила
   «Женщинам › Верхняя одежда › Пальто», заполните у категории `search_aliases_ru` / `search_aliases_tk`.
+- Магазин с точками в нескольких ТЦ попадает в группу каждого ТЦ; в группе в `locations`
+  только точки этого ТЦ. Так же работает `GET /malls/{id}/shops`.
 - Регистронезависимый поиск по туркменским буквам зависит от локали БД: нужна UTF-8 локаль
   (`en_US.utf8`, как в `docker-compose.yml`), не `C`.
 

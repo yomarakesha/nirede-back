@@ -21,14 +21,12 @@ async def list_shops(
     q: str | None = None,
 ) -> Page[ShopBrief]:
     stmt = select(Shop).order_by(Shop.name, Shop.id)
-    if mall_id is not None:
-        stmt = stmt.where(Shop.mall_id == mall_id)
-    if city_id is not None:
-        stmt = stmt.where(Shop.city_id == city_id)
+    if mall_id is not None or city_id is not None:
+        stmt = stmt.where(service.located(city_id=city_id, mall_id=mall_id, public=False))
     if q:
         stmt = stmt.where(Shop.name.ilike(f"%{q}%"))
     items, total = await paginate(session, stmt, page)
-    return Page(items=await service.load_briefs(session, items), total=total)
+    return Page(items=await service.load_briefs(session, items, public=False), total=total)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

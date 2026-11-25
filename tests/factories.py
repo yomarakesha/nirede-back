@@ -85,23 +85,10 @@ async def make_shop(
     from app.modules.shops.models import Shop, Subscription, shop_categories
     from app.timeutil import utcnow
 
-    if mall is not None:
-        kw.setdefault("city_id", mall.city_id)
-        number = number or "1"
-    else:
-        kw.setdefault("city_id", city.id)
-        kw.setdefault("address_ru", "ул. Гёроглы, 1")
-        kw.setdefault("address_tk", "Görogly köç., 1")
-    shop = Shop(
-        name=name,
-        mall_id=mall.id if mall else None,
-        floor=floor,
-        row=row,
-        number=number,
-        **kw,
-    )
+    shop = Shop(name=name, **kw)
     session.add(shop)
     await session.flush()
+    await add_location(session, shop, mall=mall, city=city, floor=floor, row=row, number=number)
     for cat in categories:
         await session.execute(shop_categories.insert().values(shop_id=shop.id, category_id=cat.id))
     if premium:
@@ -116,6 +103,36 @@ async def make_shop(
         )
     await session.flush()
     return shop
+
+
+async def add_location(
+    session,
+    shop,
+    *,
+    mall=None,
+    city=None,
+    floor=None,
+    row=None,
+    number=None,
+    address_ru="ул. Гёроглы, 1",
+    address_tk="Görogly köç., 1",
+):
+    from sqlalchemy import func, select
+
+    from app.modules.shops.models import ShopLocation
+
+    position = await session.scalar(select(func.count()).where(ShopLocation.shop_id == shop.id))
+    if mall is not None:
+        loc = ShopLocation(
+            mall_id=mall.id, city_id=mall.city_id, floor=floor, row=row, number=number or "1"
+        )
+    else:
+        loc = ShopLocation(city_id=city.id, address_ru=address_ru, address_tk=address_tk)
+    loc.shop_id = shop.id
+    loc.position = position
+    session.add(loc)
+    await session.flush()
+    return loc
 
 
 async def make_promotion(session, shop, title: str = "−30% на пальто", *, status="approved", **kw):

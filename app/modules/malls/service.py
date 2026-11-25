@@ -44,29 +44,31 @@ def check_layout(mall: Mall) -> None:
 
 
 async def check_shops_fit_layout(session: AsyncSession, mall: Mall) -> None:
-    """Refuse a layout/floors change that would leave existing shops with an invalid location."""
-    from app.modules.shops.models import Shop
+    """Refuse a layout/floors change that would leave shop locations in the mall invalid."""
+    from app.modules.shops.models import ShopLocation as Loc
 
-    # Same rules as shops.service._validate_location.
+    # Same rules as shops.service._to_location.
     if mall.layout == MallLayout.floors:
         broken = (
-            Shop.floor.is_(None)
-            | (Shop.floor < 1)
-            | (Shop.floor > (mall.floors_count or 0))
-            | Shop.row.is_not(None)
+            Loc.floor.is_(None)
+            | (Loc.floor < 1)
+            | (Loc.floor > (mall.floors_count or 0))
+            | Loc.row.is_not(None)
         )
     else:
-        broken = Shop.row.is_(None) | (Shop.row == "") | Shop.floor.is_not(None)
-    found = await session.scalar(select(Shop.id).where(Shop.mall_id == mall.id, broken).limit(1))
+        broken = Loc.row.is_(None) | (Loc.row == "") | Loc.floor.is_not(None)
+    found = await session.scalar(select(Loc.id).where(Loc.mall_id == mall.id, broken).limit(1))
     if found is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "mall_has_shops_outside_layout")
 
 
 async def sync_shop_city(session: AsyncSession, mall: Mall) -> None:
-    """In-mall shops always share the mall's city."""
-    from app.modules.shops.models import Shop
+    """Shop locations in a mall always share the mall's city."""
+    from app.modules.shops.models import ShopLocation
 
-    await session.execute(update(Shop).where(Shop.mall_id == mall.id).values(city_id=mall.city_id))
+    await session.execute(
+        update(ShopLocation).where(ShopLocation.mall_id == mall.id).values(city_id=mall.city_id)
+    )
 
 
 async def update_mall(session: AsyncSession, mall: Mall, data: MallUpdate) -> Mall:
@@ -119,9 +121,10 @@ async def to_list_items(session: AsyncSession, malls: list[Mall]) -> list[MallLi
 
 async def _shop_stats(session: AsyncSession, mall_id: int) -> tuple[int, list[CategoryBrief]]:
     # Imported here: shops depends on malls, not the other way round.
-    from app.modules.shops.models import Shop, shop_categories
+    from app.modules.shops.models import Shop, ShopLocation, shop_categories
 
-    active = select(Shop.id).where(Shop.mall_id == mall_id, Shop.is_active)
+    in_mall = select(ShopLocation.shop_id).where(ShopLocation.mall_id == mall_id)
+    active = select(Shop.id).where(Shop.id.in_(in_mall), Shop.is_active)
     count = await session.scalar(select(func.count()).select_from(active.subquery())) or 0
     category_ids = list(
         await session.scalars(

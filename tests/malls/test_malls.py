@@ -1,4 +1,14 @@
-from tests.factories import auth_headers, make_admin, make_city, make_mall, make_shop
+from sqlalchemy import select
+
+from app.modules.shops.models import ShopLocation
+from tests.factories import (
+    add_location,
+    auth_headers,
+    make_admin,
+    make_city,
+    make_mall,
+    make_shop,
+)
 
 
 def _mall_body(city_id, **kw):
@@ -153,10 +163,16 @@ async def test_mall_city_change_moves_shops(client, session):
     b = await make_city(session, "Мары", "Mary")
     mall = await make_mall(session, a)
     shop = await make_shop(session, "X", mall=mall, floor=1)
+    other = await add_location(session, shop, city=a)
     r = await client.patch(f"/api/v1/admin/malls/{mall.id}", json={"city_id": b.id}, headers=h)
     assert r.status_code == 200
-    await session.refresh(shop)
-    assert shop.city_id == b.id
+    rows = (
+        await session.execute(
+            select(ShopLocation.id, ShopLocation.city_id).where(ShopLocation.shop_id == shop.id)
+        )
+    ).all()
+    assert dict(rows)[other.id] == a.id
+    assert sorted(c for _, c in rows) == sorted([a.id, b.id])
 
 
 async def test_mall_floors_cannot_shrink_below_shops(client, session):

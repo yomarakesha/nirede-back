@@ -159,5 +159,5 @@ async def seller_shops(session: AsyncSession, user: User) -> list[SellerShopOut]
             subscription_ends_at=ends.get(brief.id),
             pending_change_requests=pending.get(brief.id, 0),
         )
-        for brief in await load_briefs(session, shops)
+        for brief in await load_briefs(session, shops, public=False)
     ]

@@ -2927,7 +2927,7 @@
             "description": "Create Shop",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Moda Line\",\n  \"mall_id\": {{mall_id}},\n  \"floor\": 2,\n  \"number\": \"214\",\n  \"phone\": \"+99365123456\",\n  \"opens_at\": \"10:00\",\n  \"closes_at\": \"22:00\",\n  \"how_to_find_ru\": \"От главного входа на эскалаторе на 2 этаж, налево до № 214.\",\n  \"how_to_find_tk\": \"Esasy girelgeden eskalator bilen 2-nji gata, çepe № 214.\",\n  \"category_ids\": [\n    {{category_id}}\n  ],\n  \"photos\": []\n}",
+              "raw": "{\n  \"name\": \"Moda Line\",\n  \"locations\": [\n    {\n      \"mall_id\": {{mall_id}},\n      \"floor\": 2,\n      \"number\": \"214\"\n    },\n    {\n      \"city_id\": {{city_id}},\n      \"address_ru\": \"ул. Гёроглы, 1\",\n      \"address_tk\": \"Görogly köçesi, 1\"\n    }\n  ],\n  \"phone\": \"+99365123456\",\n  \"opens_at\": \"10:00\",\n  \"closes_at\": \"22:00\",\n  \"how_to_find_ru\": \"От главного входа на эскалаторе на 2 этаж, налево до № 214.\",\n  \"how_to_find_tk\": \"Esasy girelgeden eskalator bilen 2-nji gata, çepe № 214.\",\n  \"category_ids\": [\n    {{category_id}}\n  ],\n  \"photos\": []\n}",
               "options": {
                 "raw": {
                   "language": "json"
