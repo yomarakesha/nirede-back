@@ -1,9 +1,4 @@
 .superpowers/
-.venv/
-__pycache__/
-*.pyc
-.env
-media/
-.pytest_cache/
-.ruff_cache/
 .opencode/
+.DS_Store
+node_modules/
