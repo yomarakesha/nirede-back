@@ -1,4 +1,4 @@
-"""Management commands: python -m app.cli create-admin <phone> | announce-due"""
+"""Management commands: python -m app.cli create-admin <phone> | announce-due | seed"""
 
 import argparse
 import asyncio
@@ -13,6 +13,7 @@ from app.modules.notifications.push import get_push_sender
 from app.modules.notifications.service import announce_due
 from app.modules.users.models import User
 from app.phone import normalize_phone
+from app.seed import seed
 
 
 async def create_admin(session: AsyncSession, phone: str) -> User:
@@ -33,6 +34,9 @@ async def _main(args: argparse.Namespace) -> None:
             print(f"admin: id={user.id} phone={user.phone}")
         elif args.command == "announce-due":
             print(f"announced: {await announce_due(session, get_push_sender())}")
+        elif args.command == "seed":
+            await seed(session)
+            print("seeded demo data")
 
 
 def main() -> None:
@@ -41,6 +45,7 @@ def main() -> None:
     admin = sub.add_parser("create-admin", help="create or promote a user to admin")
     admin.add_argument("phone")
     sub.add_parser("announce-due", help="notify followers about promotions that have started")
+    sub.add_parser("seed", help="fill the database with demo data (safe to run again)")
     asyncio.run(_main(parser.parse_args()))
 
 

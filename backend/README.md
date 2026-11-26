@@ -16,6 +16,7 @@ docker compose up -d db           # Postgres на localhost:5433, плюс ба�
 uv sync
 uv run alembic upgrade head
 uv run python -m app.cli create-admin +99365123456
+uv run python -m app.cli seed     # демо-данные: города, ТЦ, категории, магазины, акции
 uv run uvicorn app.main:app --reload
 ```
 
